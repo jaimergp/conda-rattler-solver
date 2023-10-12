@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "conda-rattler-solver"
+version = "0.0.1"
+description = "The fast pixi solver, now in conda"
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy"
+]
+requires-python = ">=3.8"
+dependencies = [
+  "conda >=23.9.0",
+  "conda-libmamba-solver >=23.9.0",
+  "py-rattler"
+]
+
+
+[project.urls]
+homepage = "https://github.com/jaimergp/conda-rattler-solver"
+
+[project.entry-points.conda]
+conda-rattler-solver = "conda_rattler_solver.plugin"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.black]
+line-length = 99
+target-version = ['py37', 'py38', 'py39', 'py310']
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = [
+  "--tb=native",
+  "--strict-markers",
+  "--xdoctest-modules",
+  "--xdoctest-style=google",
+]
+
+markers = [
+  "integration: integration tests that usually require an internet connect",
+  "slow: slow running tests",
+]
+
+[tool.isort]
+profile = "black"
+filter_files = true
+
+[tool.ruff]
+line-lenth = 99
