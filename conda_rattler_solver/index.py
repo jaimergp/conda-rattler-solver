@@ -83,7 +83,7 @@ class RattlerIndexHelper(IndexHelper):
         #         log.debug("Using %s instead of %s", solv_path, json_path)
         # except OSError as exc:
         #     log.debug("Failed to stat %s or %s", solv_path, json_path, exc_info=exc)
-        rattler_channel = RattlerChannel(str(channel))
+        rattler_channel = RattlerChannel(noauth_url.rsplit("/", 1)[0])
         repo = SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
