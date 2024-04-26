@@ -23,9 +23,8 @@ requires-python = ">=3.8"
 dependencies = [
   "conda >=23.9.0",
   "conda-libmamba-solver >=23.9.0",
-  "py-rattler"
+  "py-rattler >=0.5"
 ]
-
 
 [project.urls]
 homepage = "https://github.com/jaimergp/conda-rattler-solver"
@@ -35,6 +34,17 @@ conda-rattler-solver = "conda_rattler_solver.plugin"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"] #, "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.8"
+conda = ">=23.7.3"
+conda-libmamba-solver = ">=23.9.0"
+py-rattler = ">=0.5"
+pip = ">=24.0,<25"
 
 [tool.black]
 line-length = 99
@@ -59,4 +69,4 @@ profile = "black"
 filter_files = true
 
 [tool.ruff]
-line-lenth = 99
+line-length = 99
