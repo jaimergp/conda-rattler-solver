@@ -75,14 +75,14 @@ class RattlerIndexHelper(IndexHelper):
         channel = Channel.from_url(url)
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         json_path = Path(json_path)
-        solv_path = json_path.parent / f"{json_path.stem}.solv"
-        try:
-            # use solv file if it's newer than the json file
-            if json_path.stat().st_mtime <= solv_path.stat().st_mtime:
-                json_path = solv_path
-                log.debug("Using %s instead of %s", solv_path, json_path)
-        except OSError as exc:
-            log.debug("Failed to stat %s or %s", solv_path, json_path, exc_info=exc)
+        # solv_path = json_path.parent / f"{json_path.stem}.solv"
+        # try:
+        #     # use solv file if it's newer than the json file
+        #     if json_path.stat().st_mtime <= solv_path.stat().st_mtime:
+        #         json_path = solv_path
+        #         log.debug("Using %s instead of %s", solv_path, json_path)
+        # except OSError as exc:
+        #     log.debug("Failed to stat %s or %s", solv_path, json_path, exc_info=exc)
         rattler_channel = RattlerChannel(str(channel))
         repo = SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(

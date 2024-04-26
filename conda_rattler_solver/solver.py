@@ -9,6 +9,7 @@ from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.models.prefix_graph import PrefixGraph
+from conda.models.records import PackageRecord
 from conda_libmamba_solver.solver import LibMambaSolver
 from conda_libmamba_solver.state import SolverInputState, SolverOutputState
 from rattler import __version__ as rattler_version
@@ -18,6 +19,7 @@ from rattler import (
     PrefixRecord as RattlerPrefixRecord,
     VirtualPackage,
 )
+from rattler.exceptions import SolverError as RattlerSolverError
 
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
@@ -84,12 +86,10 @@ class RattlerSolver(LibMambaSolver):
             try:
                 records = self._solve_attempt(in_state, out_state, index)
                 self._export_solved_records(records, out_state)
-            except Exception as exc:
-                if exc.__class__.__name__.split(".")[-1] == "SolverException":
-                    exc2 = RattlerUnsatisfiableError(str(exc))
-                    exc2.allow_retry = False
-                    raise exc2
-                raise exc
+            except RattlerSolverError as exc:
+                exc2 = RattlerUnsatisfiableError(str(exc))
+                exc2.allow_retry = False
+                raise exc2 from exc
 
         # Run post-solve tasks
         out_state.post_solve(solver=self)
@@ -98,7 +98,7 @@ class RattlerSolver(LibMambaSolver):
         return out_state.current_solution
 
     def _solve_attempt(self, in_state, out_state, index):
-        out_state.prepare_specs(index)
+        out_state.check_for_pin_conflicts(index)
         tasks = self._specs_to_tasks(in_state, out_state)
         # TODO: This is a hack to get the installed packages into the solver
         # but rattler doesn't allow PrefixRecords to be passed in yet
@@ -135,13 +135,32 @@ class RattlerSolver(LibMambaSolver):
         )
 
     def _export_solved_records(self, records, out_state):
-        # rattler doesn't return the full record, so we need to query conda's SubdirData
-        # which has a huge overhead
         for record in records:
-            sd = SubdirData(Channel(record.url.rsplit("/", 1)[0]), repodata_fn=self._repodata_fn)
-            conda_records = list(sd.query_all(str(record.package_record)))
-            assert len(conda_records) == 1, conda_records
-            conda_record = conda_records[0]
-            out_state.records.set(
-                conda_record.name, conda_record, reason="Part of solution calculated by rattler"
+            out_state.records[record.name] = PackageRecord(
+                name=record.name.source,
+                version=str(record.version),
+                build=record.build,
+                build_number=record.build_number,
+                channel=record.channel,
+                subdir=record.subdir,
+                fn=record.file_name,
+                md5=record.md5,
+                legacy_bz2_md5=record.legacy_bz2_md5,
+                legacy_bz2_size=record.legacy_bz2_size,
+                url=record.url,
+                sha256=record.sha256,
+                arch=record.arch,
+                platform=record.platform,
+                depends=record.depends or (),
+                constrains=record.constrains or (),
+                track_features=record.track_features or (),
+                features=record.features or (),
+                # noarch=record.noarch,  #! TODO: MISSING
+                # preferred_env=record.preferred_env,
+                license=record.license,
+                license_family=record.license_family,
+                # package_type=record.package_type,
+                timestamp=record.timestamp or 0,
+                # date=record.date,
+                size=record.size or 0,
             )
