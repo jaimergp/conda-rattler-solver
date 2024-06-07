@@ -55,12 +55,12 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lzo-2.10-hd590300_1001.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/menuinst-2.0.2-py312h7900ff3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.4.20240210-h59595ed_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.2.1-hd590300_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.3.1-h4ab18f5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pip-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.2.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.5.0-py312hbcc2302_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.2-py312hbcc2302_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pybind11-abi-4-hd8ed1ab_3.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pycosat-0.6.6-py312h98912ed_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyhd8ed1ab_0.conda
@@ -126,12 +126,12 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/lzo-2.10-h10d778d_1001.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/menuinst-2.0.2-py312hb401068_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/ncurses-6.4.20240210-h73e2aa4_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/openssl-3.2.1-hd75f5a5_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/openssl-3.3.1-h87427d6_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pip-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.2.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-64/py-rattler-0.5.0-py312haa2b9d0_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/py-rattler-0.6.2-py312h7e81a9d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pybind11-abi-4-hd8ed1ab_3.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pycosat-0.6.6-py312h104f124_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyhd8ed1ab_0.conda
@@ -197,12 +197,12 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lzo-2.10-h93a5062_1001.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/menuinst-2.0.2-py312h81bd7bf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.4.20240210-h078ce10_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.2.1-h0d3ecfb_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.3.1-hfb2fe0b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pip-24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.2.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/py-rattler-0.5.0-py312h1a1520d_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/py-rattler-0.6.2-py312had01cb0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pybind11-abi-4-hd8ed1ab_3.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pycosat-0.6.6-py312h02f2b3b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyhd8ed1ab_0.conda
@@ -2079,30 +2079,12 @@ packages:
   timestamp: 1710866856626
 - kind: conda
   name: openssl
-  version: 3.2.1
-  build: h0d3ecfb_1
-  build_number: 1
-  subdir: osx-arm64
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.2.1-h0d3ecfb_1.conda
-  sha256: 519dc941d7ab0ebf31a2878d85c2f444450e7c5f6f41c4d07252c6bb3417b78b
-  md5: eb580fb888d93d5d550c557323ac5cee
-  depends:
-  - ca-certificates
-  constrains:
-  - pyopenssl >=22.1
-  license: Apache-2.0
-  license_family: Apache
-  size: 2855250
-  timestamp: 1710793435903
-- kind: conda
-  name: openssl
-  version: 3.2.1
-  build: hd590300_1
-  build_number: 1
+  version: 3.3.1
+  build: h4ab18f5_0
   subdir: linux-64
-  url: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.2.1-hd590300_1.conda
-  sha256: 2c689444ed19a603be457284cf2115ee728a3fafb7527326e96054dee7cdc1a7
-  md5: 9d731343cff6ee2e5a25c4a091bf8e2a
+  url: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.3.1-h4ab18f5_0.conda
+  sha256: 9691f8bd6394c5bb0b8d2f47cd1467b91bd5b1df923b69e6b517f54496ee4b50
+  md5: a41fa0e391cc9e0d6b78ac69ca047a6c
   depends:
   - ca-certificates
   - libgcc-ng >=12
@@ -2110,25 +2092,42 @@ packages:
   - pyopenssl >=22.1
   license: Apache-2.0
   license_family: Apache
-  size: 2865379
-  timestamp: 1710793235846
+  size: 2896170
+  timestamp: 1717546157673
 - kind: conda
   name: openssl
-  version: 3.2.1
-  build: hd75f5a5_1
-  build_number: 1
+  version: 3.3.1
+  build: h87427d6_0
   subdir: osx-64
-  url: https://conda.anaconda.org/conda-forge/osx-64/openssl-3.2.1-hd75f5a5_1.conda
-  sha256: 7ae0ac6a1673584a8a380c2ff3d46eca48ed53bc7174c0d4eaa0dd2f247a0984
-  md5: 570a6f04802df580be529f3a72d2bbf7
+  url: https://conda.anaconda.org/conda-forge/osx-64/openssl-3.3.1-h87427d6_0.conda
+  sha256: 272bee725877f417fef923f5e7852ebfe06b40b6bf3364f4498b2b3f568d5e2c
+  md5: 1bdad93ae01353340f194c5d879745db
   depends:
+  - __osx >=10.13
   - ca-certificates
   constrains:
   - pyopenssl >=22.1
   license: Apache-2.0
   license_family: Apache
-  size: 2506344
-  timestamp: 1710793930515
+  size: 2547614
+  timestamp: 1717546605131
+- kind: conda
+  name: openssl
+  version: 3.3.1
+  build: hfb2fe0b_0
+  subdir: osx-arm64
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.3.1-hfb2fe0b_0.conda
+  sha256: 6cb2d44f027b259be8cba2240bdf21af7b426e4132a73e0052f7173ab8b60ab0
+  md5: c4a0bbd96a0da60bf265dac62c87f4e1
+  depends:
+  - __osx >=11.0
+  - ca-certificates
+  constrains:
+  - pyopenssl >=22.1
+  license: Apache-2.0
+  license_family: Apache
+  size: 2891941
+  timestamp: 1717545846389
 - kind: conda
   name: packaging
   version: '24.0'
@@ -2201,15 +2200,36 @@ packages:
   timestamp: 1713667175451
 - kind: conda
   name: py-rattler
-  version: 0.5.0
-  build: py312h1a1520d_0
+  version: 0.6.2
+  build: py312h7e81a9d_0
+  subdir: osx-64
+  url: https://conda.anaconda.org/conda-forge/osx-64/py-rattler-0.6.2-py312h7e81a9d_0.conda
+  sha256: cbcc0f4559545838e60591d7d943b29f395ac0df95b3a2a292541a2eebe0fa7f
+  md5: 33567303565d405dd9ace503b6de719b
+  depends:
+  - __osx >=10.13
+  - openssl >=3.3.0,<4.0a0
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  constrains:
+  - __osx >=10.12
+  license: BSD-3-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/py-rattler
+  size: 4189443
+  timestamp: 1717414531391
+- kind: conda
+  name: py-rattler
+  version: 0.6.2
+  build: py312had01cb0_0
   subdir: osx-arm64
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/py-rattler-0.5.0-py312h1a1520d_0.conda
-  sha256: 94fb32cbff246714b762ffa0cd6955074a6eaf729de96538025b22b52d290b0c
-  md5: 6a69af3526375bae68eca8e421d4d5de
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/py-rattler-0.6.2-py312had01cb0_0.conda
+  sha256: ddb63feaac1fd00a4f36c6120189b3b3f29035d9132a6a48500399331a78cef5
+  md5: fa2e04d7c75d4ff1ab1b5b1f19e5a3a6
   depends:
   - __osx >=11.0
-  - openssl >=3.2.1,<4.0a0
+  - openssl >=3.3.0,<4.0a0
   - python >=3.12,<3.13.0a0
   - python >=3.12,<3.13.0a0 *_cpython
   - python_abi 3.12.* *_cp312
@@ -2219,48 +2239,27 @@ packages:
   license_family: BSD
   purls:
   - pkg:pypi/py-rattler
-  size: 3375926
-  timestamp: 1714141634009
+  size: 4098402
+  timestamp: 1717414617708
 - kind: conda
   name: py-rattler
-  version: 0.5.0
-  build: py312haa2b9d0_0
-  subdir: osx-64
-  url: https://conda.anaconda.org/conda-forge/osx-64/py-rattler-0.5.0-py312haa2b9d0_0.conda
-  sha256: dbf21a18469a37d59b0c05315a577f3214ac52a792978ae89d6cb801dfdd1c1b
-  md5: 9e1e40c61ce865c093bdcd16ecaf0e46
-  depends:
-  - __osx >=10.12
-  - openssl >=3.2.1,<4.0a0
-  - python >=3.12,<3.13.0a0
-  - python_abi 3.12.* *_cp312
-  constrains:
-  - __osx >=10.12
-  license: BSD-3-Clause
-  license_family: BSD
-  purls:
-  - pkg:pypi/py-rattler
-  size: 3499779
-  timestamp: 1714141380235
-- kind: conda
-  name: py-rattler
-  version: 0.5.0
+  version: 0.6.2
   build: py312hbcc2302_0
   subdir: linux-64
-  url: https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.5.0-py312hbcc2302_0.conda
-  sha256: 55fe41873f2a071ae3c0b9b68032c66e01d4fd808083f08470f86dca1abfb208
-  md5: 52dc0c4567c4cb30be79bb62b9e387c3
+  url: https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.2-py312hbcc2302_0.conda
+  sha256: 04779ece8a0910e3df2e15f4d0cfe429c10f52b8f5dd1ac4861be9e4caadfc48
+  md5: 3b988326c32be88e214609265256247e
   depends:
   - libgcc-ng >=12
-  - openssl >=3.2.1,<4.0a0
+  - openssl >=3.3.0,<4.0a0
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: BSD-3-Clause
   license_family: BSD
   purls:
   - pkg:pypi/py-rattler
-  size: 5306628
-  timestamp: 1714140922537
+  size: 6065515
+  timestamp: 1717414259552
 - kind: conda
   name: pybind11-abi
   version: '4'
