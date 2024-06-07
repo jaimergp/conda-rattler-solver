@@ -1,3 +1,4 @@
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 
@@ -126,12 +127,14 @@ class RattlerSolver(LibMambaSolver):
             #             if MatchSpec(spec).match(record):
             #                 locked.append(rattler_installed[record.name])
 
-        return solve(
-            specs=[RattlerMatchSpec(s) for s in specs],
-            available_packages=[info.repo for info in index._index.values()],
-            # locked_packages=locked,  # TODO
-            # pinned_packages=pins,  # TODO
-            virtual_packages=[p.into_generic() for p in VirtualPackage.current()],
+        return asyncio.run(
+            solve(
+                channels=[str(info.local_json) for info in index._index.values()],
+                specs=[RattlerMatchSpec(s) for s in specs],
+                # locked_packages=locked,  # TODO
+                # pinned_packages=pins,  # TODO
+                virtual_packages=[p.into_generic() for p in VirtualPackage.current()],
+            )
         )
 
     def _export_solved_records(self, records, out_state):

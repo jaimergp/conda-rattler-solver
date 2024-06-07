@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Dict, Iterable, Tuple, Union
@@ -10,12 +11,21 @@ from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
 from conda.common.url import percent_decode, remove_auth, split_anaconda_token
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
-from conda_libmamba_solver.index import _ChannelRepoInfo
 from conda_libmamba_solver.state import IndexHelper
 
 from rattler import SparseRepoData, Channel as RattlerChannel
 
 log = logging.getLogger(f"conda.{__name__}")
+
+
+@dataclass(frozen=True)
+class _ChannelRepoInfo:
+    "A dataclass mapping conda Channels, libmamba Repos and URLs"
+    channel: Channel
+    repo: SparseRepoData
+    full_url: str
+    noauth_url: str
+    local_json: str
 
 
 class RattlerIndexHelper(IndexHelper):
@@ -90,6 +100,7 @@ class RattlerIndexHelper(IndexHelper):
             channel=channel,
             full_url=url,
             noauth_url=noauth_url,
+            local_json=json_path,
         )
 
     def _load_channels(self) -> Dict[str, _ChannelRepoInfo]:
