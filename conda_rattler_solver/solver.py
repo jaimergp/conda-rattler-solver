@@ -21,6 +21,7 @@ from rattler.exceptions import SolverError as RattlerSolverError
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
+from .utils import rattler_record_to_conda_record
 
 log = logging.getLogger(f"conda.{__name__}")
 
@@ -99,6 +100,7 @@ class RattlerSolver(LibMambaSolver):
         index: RattlerIndexHelper,
     ):
         solution = None
+        out_state.check_for_pin_conflicts(index)
         for attempt in range(1, self._max_attempts(in_state) + 1):
             log.debug("Starting solver attempt %s", attempt)
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt)
@@ -140,7 +142,6 @@ class RattlerSolver(LibMambaSolver):
         index: RattlerIndexHelper,
         attempt: int = 0,
     ):
-        out_state.check_for_pin_conflicts(index)
         tasks = self._specs_to_tasks(in_state, out_state)
         virtual_packages = [
             rattler.GenericVirtualPackage(
@@ -148,27 +149,47 @@ class RattlerSolver(LibMambaSolver):
             )
             for pkg in in_state.virtual.values()
         ]
+        remove = [
+            MatchSpec(spec).name
+            for (task_name, _), task_specs in tasks.items()
+            for spec in task_specs
+            if task_name.startswith("ERASE")
+        ]
 
         specs = []
+        constrained_specs = []
         pinned_packages = []
         locked_packages = []
         for (task_name, _), task_specs in tasks.items():
             if task_name in ("INSTALL", "UPDATE"):
                 specs.extend(task_specs)
-            elif task_name in ("ADD_PIN", "USERINSTALLED"):
+            elif task_name.startswith("ERASE"):
+                constrained_specs.extend([f"{MatchSpec(spec).name}<0.0.0a0" for spec in task_specs])
+            elif task_name == "ADD_PIN":
+                constrained_specs.extend(task_specs)
+            elif task_name in "USERINSTALLED":
                 for spec in task_specs:
-                    for record in in_state.installed.values():
-                        if MatchSpec(spec).match(record):
-                            pinned_packages.append(
-                                self._prefix_record_to_rattler_prefix_record(record)
-                            )
-            elif task_name == "LOCK":
-                for spec in task_specs:
+                    if MatchSpec(spec).name in remove:
+                        continue
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
                             locked_packages.append(
                                 self._prefix_record_to_rattler_prefix_record(record)
                             )
+            elif task_name == "LOCK":
+                for spec in task_specs:
+                    if MatchSpec(spec).name in remove:
+                        continue
+                    for record in in_state.installed.values():
+                        if MatchSpec(spec).match(record):
+                            pinned_packages.append(
+                                self._prefix_record_to_rattler_prefix_record(record)
+                            )
+        # print("specs=", *[rattler.MatchSpec(s) for s in specs])
+        # print("locked_packages=", *locked_packages)
+        # print("pinned_packages=", *pinned_packages)
+        # print("virtual_packages=", *virtual_packages)
+        # print("constraints=", *[rattler.MatchSpec(s) for s in constrained_specs])
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
@@ -181,6 +202,7 @@ class RattlerSolver(LibMambaSolver):
                     if context.channel_priority == ChannelPriority.STRICT
                     else rattler.ChannelPriority.Disabled,
                     strategy="highest",
+                    constraints=[rattler.MatchSpec(s) for s in constrained_specs],
                 )
             )
         except RattlerSolverError as exc:
@@ -234,39 +256,10 @@ class RattlerSolver(LibMambaSolver):
         out_state.conflicts.update(unsatisfiable)
 
     def _export_solved_records(self, records, out_state):
-        for record in records:
-            if timestamp := record.timestamp:
-                timestamp = int(timestamp.timestamp() * 1000)
-            else:
-                timestamp = 0
-            out_state.records[record.name.source] = PackageRecord(
-                name=record.name.source,
-                version=str(record.version),
-                build=record.build,
-                build_number=record.build_number,
-                channel=record.channel,
-                subdir=record.subdir,
-                fn=record.file_name,
-                md5=record.md5.lower() if record.md5 else None,
-                legacy_bz2_md5=record.legacy_bz2_md5.lower() if record.legacy_bz2_md5 else None,
-                legacy_bz2_size=record.legacy_bz2_size,
-                url=record.url,
-                sha256=record.sha256.lower() if record.sha256 else None,
-                arch=record.arch,
-                platform=record.platform,
-                depends=record.depends or (),
-                constrains=record.constrains or (),
-                track_features=record.track_features or (),
-                features=record.features or (),
-                noarch=record.noarch,
-                # preferred_env=record.preferred_env,
-                license=record.license,
-                license_family=record.license_family,
-                # package_type=record.package_type,
-                timestamp=timestamp,
-                # date=record.date,
-                size=record.size or 0,
-            )
+        for rattler_record in records:
+            conda_record = rattler_record_to_conda_record(rattler_record)
+            out_state.records[conda_record.name] = conda_record
+
 
     @lru_cache(maxsize=None)
     def _prefix_record_to_rattler_prefix_record(self, record):

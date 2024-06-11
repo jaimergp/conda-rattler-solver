@@ -5,15 +5,17 @@ from functools import partial
 from pathlib import Path
 from typing import Dict, Iterable, Tuple, Union
 
+import rattler
 from conda.base.constants import REPODATA_FN
 from conda.base.context import context
 from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
 from conda.common.url import percent_decode, remove_auth, split_anaconda_token
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
+from conda.models.records import PackageRecord
 from conda_libmamba_solver.state import IndexHelper
 
-from rattler import SparseRepoData, Channel as RattlerChannel
+from .utils import rattler_record_to_conda_record
 
 log = logging.getLogger(f"conda.{__name__}")
 
@@ -22,7 +24,7 @@ log = logging.getLogger(f"conda.{__name__}")
 class _ChannelRepoInfo:
     "A dataclass mapping conda Channels, libmamba Repos and URLs"
     channel: Channel
-    repo: SparseRepoData
+    repo: rattler.SparseRepoData
     full_url: str
     noauth_url: str
     local_json: str
@@ -85,8 +87,8 @@ class RattlerIndexHelper(IndexHelper):
         channel = Channel.from_url(url)
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         json_path = Path(json_path)
-        rattler_channel = RattlerChannel(noauth_url.rsplit("/", 1)[0])
-        repo = SparseRepoData(rattler_channel, channel.subdir, json_path)
+        rattler_channel = rattler.Channel(noauth_url.rsplit("/", 1)[0])
+        repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
             channel=channel,
@@ -134,3 +136,13 @@ class RattlerIndexHelper(IndexHelper):
             index[info.noauth_url] = info
 
         return index
+    
+    def search(self, spec: str) -> list[PackageRecord]:
+        # This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
+        conda_records = []
+        spec = rattler.MatchSpec(str(spec))
+        for info in self._index.values():
+            for record in info.repo.load_records(spec.name):
+                if spec.matches(record):
+                    conda_records.append(rattler_record_to_conda_record(record))
+        return conda_records
