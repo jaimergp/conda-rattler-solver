@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -9,6 +10,7 @@ from conda.base.constants import ChannelPriority
 from conda.base.context import context
 from conda.common.constants import NULL
 from conda.common.io import Spinner
+from conda.exceptions import PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
 from conda.models.records import PackageRecord
 from conda_libmamba_solver.solver import LibMambaSolver
@@ -19,6 +21,8 @@ from rattler.exceptions import SolverError as RattlerSolverError
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
+
+log = logging.getLogger(f"conda.{__name__}")
 
 
 class RattlerSolver(LibMambaSolver):
@@ -72,31 +76,78 @@ class RattlerSolver(LibMambaSolver):
             index = RattlerIndexHelper(all_channels, self.subdirs, self._repodata_fn)
 
         with Spinner(
-            "Solving environment",
+            self._spinner_msg_solving(),
             enabled=not context.verbosity and not context.quiet,
             json=context.json,
         ):
-            try:
-                records = self._solve_attempt(in_state, out_state, index)
-                self._export_solved_records(records, out_state)
-            except RattlerSolverError as exc:
-                exc2 = RattlerUnsatisfiableError(str(exc))
-                exc2.allow_retry = False
-                raise exc2 from exc
+            # This function will copy and mutate `out_state`
+            # Make sure we get the latest copy to return the correct solution below
+            out_state = self._solving_loop(in_state, out_state, index)
+            self.neutered_specs = tuple(out_state.neutered.values())
+            solution = out_state.current_solution
+
+        # Check whether conda can be updated; this is normally done in .solve_for_diff()
+        # but we are doing it now so we can reuse in_state and friends
+        self._notify_conda_outdated(None, index, solution)
+
+        return solution
+
+    def _solving_loop(
+        self,
+        in_state: SolverInputState,
+        out_state: SolverOutputState,
+        index: RattlerIndexHelper,
+    ):
+        solution = None
+        for attempt in range(1, self._max_attempts(in_state) + 1):
+            log.debug("Starting solver attempt %s", attempt)
+            solution = self._solve_attempt(in_state, out_state, index, attempt=attempt)
+            if solution is not None:
+                break
+            out_state = SolverOutputState(
+                solver_input_state=in_state,
+                records=dict(out_state.records),
+                for_history=dict(out_state.for_history),
+                neutered=dict(out_state.neutered),
+                conflicts=dict(out_state.conflicts),
+                pins=dict(out_state.pins),
+            )
+        else:
+            # Didn't find a solution yet, let's unfreeze everything
+            out_state.conflicts.update(
+                {
+                    name: record.to_match_spec()
+                    for name, record in in_state.installed.items()
+                    if not record.is_unmanageable
+                }
+            )
+            solution = self._solve_attempt(in_state, out_state, index, attempt=attempt + 1)
+            if solution is None:
+                raise RattlerUnsatisfiableError("Could not find solution")
+
+        # We didn't fail? Nice, let's return the calculated state
+        self._export_solved_records(solution, out_state)
 
         # Run post-solve tasks
         out_state.post_solve(solver=self)
-        self.neutered_specs = tuple(out_state.neutered.values())
 
-        return out_state.current_solution
+        return out_state
 
     def _solve_attempt(
-        self, in_state: SolverInputState, out_state: SolverOutputState, index: RattlerIndexHelper
+        self,
+        in_state: SolverInputState,
+        out_state: SolverOutputState,
+        index: RattlerIndexHelper,
+        attempt: int = 0,
     ):
         out_state.check_for_pin_conflicts(index)
         tasks = self._specs_to_tasks(in_state, out_state)
-        # TODO: This is a hack to get the installed packages into the solver
-        # but rattler doesn't allow PrefixRecords to be built through the API yet
+        virtual_packages = [
+            rattler.GenericVirtualPackage(
+                rattler.PackageName(pkg.name), rattler.Version(pkg.version), pkg.build
+            )
+            for pkg in in_state.virtual.values()
+        ]
 
         specs = []
         pinned_packages = []
@@ -108,33 +159,79 @@ class RattlerSolver(LibMambaSolver):
                 for spec in task_specs:
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
-                            pinned_packages.append(self._prefix_record_to_rattler_prefix_record(record))
+                            pinned_packages.append(
+                                self._prefix_record_to_rattler_prefix_record(record)
+                            )
             elif task_name == "LOCK":
                 for spec in task_specs:
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
-                            locked_packages.append(self._prefix_record_to_rattler_prefix_record(record))
-        virtual_packages = []
-        for pkg in in_state.virtual.values():
-            virtual_packages.append(
-                rattler.GenericVirtualPackage(
-                    rattler.PackageName(pkg.name), rattler.Version(pkg.version), pkg.build
+                            locked_packages.append(
+                                self._prefix_record_to_rattler_prefix_record(record)
+                            )
+        try:
+            solution = asyncio.run(
+                rattler.solve_with_sparse_repodata(
+                    specs=[rattler.MatchSpec(s) for s in specs],
+                    sparse_repodata=[info.repo for info in index._index.values()],
+                    locked_packages=locked_packages,
+                    pinned_packages=pinned_packages,
+                    virtual_packages=virtual_packages,
+                    channel_priority=rattler.ChannelPriority.Strict
+                    if context.channel_priority == ChannelPriority.STRICT
+                    else rattler.ChannelPriority.Disabled,
+                    strategy="highest",
                 )
             )
+        except RattlerSolverError as exc:
+            self._maybe_raise_for_problems(str(exc), out_state)
+        else:
+            out_state.conflicts.clear()
+            return solution
 
-        return asyncio.run(
-            rattler.solve_with_sparse_repodata(
-                specs=[rattler.MatchSpec(s) for s in specs],
-                sparse_repodata=[info.repo for info in index._index.values()],
-                locked_packages=locked_packages,
-                pinned_packages=pinned_packages,
-                virtual_packages=virtual_packages,
-                channel_priority=rattler.ChannelPriority.Strict
-                if context.channel_priority == ChannelPriority.STRICT
-                else rattler.ChannelPriority.Disabled,
-                strategy="highest",
+    def _maybe_raise_for_problems(self, problems: str, out_state: SolverOutputState):
+        unsatisfiable = {}
+        not_found = {}
+        for line in problems.splitlines():
+            line = line.strip(" ─│└├")
+            words = line.split()
+            if "is locked, but another version is required as reported above" in line:
+                unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
+            elif "which cannot be installed because there are no viable options" in line:
+                unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1].strip(',')}")
+            elif "cannot be installed because there are no viable options" in line:
+                unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
+
+        if not unsatisfiable and not_found:
+            log.debug(
+                "Inferred PackagesNotFoundError %s from conflicts:\n%s",
+                tuple(not_found.keys()),
+                problems,
             )
-        )
+            # This is not a conflict, but a missing package in the channel
+            exc = PackagesNotFoundError(tuple(not_found.values()), tuple(self.channels))
+            exc.allow_retry = False
+            raise exc
+
+        previous = out_state.conflicts or {}
+        previous_set = set(previous.values())
+        current_set = set(unsatisfiable.values())
+
+        diff = current_set.difference(previous_set)
+        if len(diff) > 1 and "python" in unsatisfiable:
+            # Only report python as conflict if it's the only conflict reported
+            # This helps us prioritize neutering for other dependencies first
+            unsatisfiable.pop("python")
+
+        if (previous and (previous_set == current_set)) or len(diff) >= 10:
+            # We have same or more (up to 10) unsatisfiable now! Abort to avoid recursion
+            exc = RattlerUnsatisfiableError(problems)
+            # do not allow conda.cli.install to try more things
+            exc.allow_retry = False
+            raise exc
+
+        log.debug("Attempt failed with %s conflicts:\n%s", len(unsatisfiable), problems)
+        out_state.conflicts.update(unsatisfiable)
 
     def _export_solved_records(self, records, out_state):
         for record in records:
@@ -142,7 +239,7 @@ class RattlerSolver(LibMambaSolver):
                 timestamp = int(timestamp.timestamp() * 1000)
             else:
                 timestamp = 0
-            out_state.records[record.name] = PackageRecord(
+            out_state.records[record.name.source] = PackageRecord(
                 name=record.name.source,
                 version=str(record.version),
                 build=record.build,
@@ -171,8 +268,10 @@ class RattlerSolver(LibMambaSolver):
                 size=record.size or 0,
             )
 
-    @lru_cache(maxsize=0)
+    @lru_cache(maxsize=None)
     def _prefix_record_to_rattler_prefix_record(self, record):
+        # TODO: This is a hack to get the installed packages into the solver
+        # but rattler doesn't allow PrefixRecords to be built through the API yet
         with NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
             json.dump(record.dump(), tmp)
         try:
