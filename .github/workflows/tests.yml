@@ -232,7 +232,7 @@ jobs:
         default-channel: ['conda-forge']  # [defaults, conda-forge]
         test-type: [unit, integration] # [conda-rattler-solver, unit, integration]  # CONDA-RATTLER-SOLVER CHANGE
         test-group: [1, 2, 3]
-        # exclude:
+        exclude:
         #   - python-version: '3.8'
         #     default-channel: conda-forge
         #   - python-version: '3.9'
@@ -243,8 +243,8 @@ jobs:
         #     default-channel: defaults  # CONDA-RATTLER-SOLVER CHANGE
         #   - python-version: '3.12'
         #     default-channel: conda-forge
-        #   - test-type: unit
-        #     test-group: 3
+          - test-type: unit
+            test-group: 3
         #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
         #     test-group: 2  # CONDA-RATTLER-SOLVER CHANGE
         #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
