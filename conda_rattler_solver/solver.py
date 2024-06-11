@@ -145,7 +145,6 @@ class RattlerSolver(LibMambaSolver):
                 timestamp = int(timestamp.timestamp() * 1000)
             else:
                 timestamp = 0
-            print(record.sha256.lower())
             out_state.records[record.name] = PackageRecord(
                 name=record.name.source,
                 version=str(record.version),
