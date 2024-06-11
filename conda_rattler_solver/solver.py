@@ -1,6 +1,8 @@
 import asyncio
+import json
 from functools import lru_cache
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import rattler
 from conda.base.constants import ChannelPriority
@@ -95,11 +97,6 @@ class RattlerSolver(LibMambaSolver):
         tasks = self._specs_to_tasks(in_state, out_state)
         # TODO: This is a hack to get the installed packages into the solver
         # but rattler doesn't allow PrefixRecords to be built through the API yet
-        rattler_installed = {}
-        for json_path in Path(self.prefix).glob("conda-meta/*.json"):
-            name = json_path.stem.rsplit("-", 2)[0]
-            record = rattler.PrefixRecord.from_path(json_path)
-            rattler_installed[name] = record
 
         specs = []
         pinned_packages = []
@@ -111,12 +108,12 @@ class RattlerSolver(LibMambaSolver):
                 for spec in task_specs:
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
-                            pinned_packages.append(rattler_installed[record.name])
+                            pinned_packages.append(self._prefix_record_to_rattler_prefix_record(record))
             elif task_name == "LOCK":
                 for spec in task_specs:
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
-                            locked_packages.append(rattler_installed[record.name])
+                            locked_packages.append(self._prefix_record_to_rattler_prefix_record(record))
         virtual_packages = []
         for pkg in in_state.virtual.values():
             virtual_packages.append(
@@ -173,3 +170,12 @@ class RattlerSolver(LibMambaSolver):
                 # date=record.date,
                 size=record.size or 0,
             )
+
+    @lru_cache(maxsize=0)
+    def _prefix_record_to_rattler_prefix_record(self, record):
+        with NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
+            json.dump(record.dump(), tmp)
+        try:
+            return rattler.PrefixRecord.from_path(tmp.name)
+        finally:
+            Path(tmp.name).unlink()
