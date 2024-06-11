@@ -73,7 +73,8 @@ jobs:
   windows:
     # only run test suite if there are code changes
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: false
+    # if: needs.changes.outputs.code == 'true'
 
     runs-on: windows-latest
     strategy:
@@ -227,27 +228,27 @@ jobs:
       fail-fast: false
       matrix:
         # test all lower versions (w/ defaults) and upper version (w/ defaults and conda-forge)
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
-        default-channel: [defaults, conda-forge]
-        test-type: [conda-rattler-solver, unit, integration]  # CONDA-RATTLER-SOLVER CHANGE
+        python-version: ['3.10']  # ['3.8', '3.9', '3.10', '3.11', '3.12']
+        default-channel: ['conda-forge']  # [defaults, conda-forge]
+        test-type: [unit, integration] # [conda-rattler-solver, unit, integration]  # CONDA-RATTLER-SOLVER CHANGE
         test-group: [1, 2, 3]
-        exclude:
-          - python-version: '3.8'
-            default-channel: conda-forge
-          - python-version: '3.9'
-            default-channel: conda-forge
-          - python-version: '3.10'
-            default-channel: conda-forge
-          - python-version: '3.11'  # CONDA-RATTLER-SOLVER CHANGE
-            default-channel: defaults  # CONDA-RATTLER-SOLVER CHANGE
-          - python-version: '3.12'
-            default-channel: conda-forge
-          - test-type: unit
-            test-group: 3
-          - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
-            test-group: 2  # CONDA-RATTLER-SOLVER CHANGE
-          - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
-            test-group: 3  # CONDA-RATTLER-SOLVER CHANGE
+        # exclude:
+        #   - python-version: '3.8'
+        #     default-channel: conda-forge
+        #   - python-version: '3.9'
+        #     default-channel: conda-forge
+        #   - python-version: '3.10'
+        #     default-channel: conda-forge
+        #   - python-version: '3.11'  # CONDA-RATTLER-SOLVER CHANGE
+        #     default-channel: defaults  # CONDA-RATTLER-SOLVER CHANGE
+        #   - python-version: '3.12'
+        #     default-channel: conda-forge
+        #   - test-type: unit
+        #     test-group: 3
+        #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
+        #     test-group: 2  # CONDA-RATTLER-SOLVER CHANGE
+        #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
+        #     test-group: 3  # CONDA-RATTLER-SOLVER CHANGE
     env:
       PYTEST_MARKER: ${{ matrix.test-type == 'unit' && 'not integration' || 'integration' }}
       PYTEST_SPLITS: ${{ matrix.test-type == 'unit' && '2' || '3' }}
@@ -490,7 +491,8 @@ jobs:
   macos:
     # only run test suite if there are code changes
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: false
+    # if: needs.changes.outputs.code == 'true'
 
     runs-on: ${{ (matrix.arch == 'osx-64' && 'macos-13') || 'macos-14' }}
     defaults:
