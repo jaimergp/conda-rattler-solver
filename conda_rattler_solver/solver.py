@@ -145,6 +145,7 @@ class RattlerSolver(LibMambaSolver):
                 timestamp = int(timestamp.timestamp() * 1000)
             else:
                 timestamp = 0
+            print(record.sha256.lower())
             out_state.records[record.name] = PackageRecord(
                 name=record.name.source,
                 version=str(record.version),
@@ -153,11 +154,11 @@ class RattlerSolver(LibMambaSolver):
                 channel=record.channel,
                 subdir=record.subdir,
                 fn=record.file_name,
-                md5=record.md5,
-                legacy_bz2_md5=record.legacy_bz2_md5,
+                md5=record.md5.lower() if record.md5 else None,
+                legacy_bz2_md5=record.legacy_bz2_md5.lower() if record.legacy_bz2_md5 else None,
                 legacy_bz2_size=record.legacy_bz2_size,
                 url=record.url,
-                sha256=record.sha256,
+                sha256=record.sha256.lower() if record.sha256 else None,
                 arch=record.arch,
                 platform=record.platform,
                 depends=record.depends or (),
