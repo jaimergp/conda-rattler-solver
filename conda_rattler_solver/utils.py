@@ -1,5 +1,16 @@
+from __future__ import annotations
+
 import rattler
 from conda.models.records import PackageRecord
+
+
+def _hash_to_str(bytes_or_str: bytes | str | None) -> None | str:
+    if not bytes_or_str:
+        return None
+    if isinstance(bytes_or_str, bytes):
+        return bytes_or_str.hex()
+    return bytes_or_str.lower()
+
 
 def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageRecord:
     if timestamp := record.timestamp:
@@ -14,11 +25,11 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         channel=record.channel,
         subdir=record.subdir,
         fn=record.file_name,
-        md5=record.md5.lower() if record.md5 else None,
-        legacy_bz2_md5=record.legacy_bz2_md5.lower() if record.legacy_bz2_md5 else None,
+        md5=_hash_to_str(record.md5),
+        legacy_bz2_md5=_hash_to_str(record.legacy_bz2_md5),
         legacy_bz2_size=record.legacy_bz2_size,
         url=record.url,
-        sha256=record.sha256.lower() if record.sha256 else None,
+        sha256=_hash_to_str(record.sha256),
         arch=record.arch,
         platform=record.platform,
         depends=record.depends or (),

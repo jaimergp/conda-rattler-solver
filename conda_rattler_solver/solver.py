@@ -12,7 +12,6 @@ from conda.common.constants import NULL
 from conda.common.io import Spinner
 from conda.exceptions import PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
-from conda.models.records import PackageRecord
 from conda_libmamba_solver.solver import LibMambaSolver
 from conda_libmamba_solver.state import SolverInputState, SolverOutputState
 from rattler import __version__ as rattler_version
@@ -164,7 +163,9 @@ class RattlerSolver(LibMambaSolver):
             if task_name in ("INSTALL", "UPDATE"):
                 specs.extend(task_specs)
             elif task_name.startswith("ERASE"):
-                constrained_specs.extend([f"{MatchSpec(spec).name}<0.0.0a0" for spec in task_specs])
+                constrained_specs.extend(
+                    [f"{MatchSpec(spec).name}<0.0.0a0" for spec in task_specs]
+                )
             elif task_name == "ADD_PIN":
                 constrained_specs.extend(task_specs)
             elif task_name in "USERINSTALLED":
@@ -259,7 +260,6 @@ class RattlerSolver(LibMambaSolver):
         for rattler_record in records:
             conda_record = rattler_record_to_conda_record(rattler_record)
             out_state.records[conda_record.name] = conda_record
-
 
     @lru_cache(maxsize=None)
     def _prefix_record_to_rattler_prefix_record(self, record):

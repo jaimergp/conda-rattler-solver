@@ -23,6 +23,7 @@ log = logging.getLogger(f"conda.{__name__}")
 @dataclass(frozen=True)
 class _ChannelRepoInfo:
     "A dataclass mapping conda Channels, libmamba Repos and URLs"
+
     channel: Channel
     repo: rattler.SparseRepoData
     full_url: str
@@ -42,7 +43,6 @@ class RattlerIndexHelper(IndexHelper):
         self._repodata_fn = repodata_fn
 
         self._index = self._load_channels()
-
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
         orig_key = key
@@ -136,7 +136,7 @@ class RattlerIndexHelper(IndexHelper):
             index[info.noauth_url] = info
 
         return index
-    
+
     def search(self, spec: str) -> list[PackageRecord]:
         # This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
         conda_records = []
