@@ -2,6 +2,7 @@ from conda import plugins
 
 from .solver import RattlerSolver
 
+
 @plugins.hookimpl
 def conda_solvers():
     """
