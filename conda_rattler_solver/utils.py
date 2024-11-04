@@ -17,6 +17,16 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         timestamp = int(timestamp.timestamp() * 1000)
     else:
         timestamp = 0
+
+    if record.noarch.none:
+        noarch = None
+    elif record.noarch.python:
+        noarch = "python"
+    elif record.noarch.generic:
+        noarch = "generic"
+    else:
+        raise ValueError(f"Unknown noarch type: {record.noarch}")
+
     return PackageRecord(
         name=record.name.source,
         version=str(record.version),
@@ -36,7 +46,7 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         constrains=record.constrains or (),
         track_features=record.track_features or (),
         features=record.features or (),
-        noarch=record.noarch,
+        noarch=noarch,
         # preferred_env=record.preferred_env,
         license=record.license,
         license_family=record.license_family,

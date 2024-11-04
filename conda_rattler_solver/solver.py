@@ -152,7 +152,7 @@ class RattlerSolver(LibMambaSolver):
             MatchSpec(spec).name
             for (task_name, _), task_specs in tasks.items()
             for spec in task_specs
-            if task_name.startswith("ERASE")
+            if (task_name.startswith("ERASE") or task_name == "UPDATE")
         ]
 
         specs = []
@@ -172,6 +172,8 @@ class RattlerSolver(LibMambaSolver):
                 for spec in task_specs:
                     if MatchSpec(spec).name in remove:
                         continue
+
+                    specs.append(spec)
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
                             locked_packages.append(
@@ -186,11 +188,17 @@ class RattlerSolver(LibMambaSolver):
                             pinned_packages.append(
                                 self._prefix_record_to_rattler_prefix_record(record)
                             )
+        # remove any packages that should be updated from the locked_packages
+        locked_packages = [record for record in locked_packages if record.name not in remove]
+
+        specs = [s.replace("=[", "[") for s in specs]
+
         # print("specs=", *[rattler.MatchSpec(s) for s in specs])
         # print("locked_packages=", *locked_packages)
         # print("pinned_packages=", *pinned_packages)
         # print("virtual_packages=", *virtual_packages)
         # print("constraints=", *[rattler.MatchSpec(s) for s in constrained_specs])
+        # print("index=", index._index)
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
