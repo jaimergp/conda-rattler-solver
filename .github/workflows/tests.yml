@@ -110,8 +110,8 @@ jobs:
         with:
           fetch-depth: 0
           # repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
-          repository: jaimergp/conda  # TEMPORARY
-          ref: libmamba-v2-fixes  # TEMPORARY
+          repository: wolfv/conda  # TEMPORARY
+          ref: test-rattler  # TEMPORARY
           path: conda  # CONDA-RATTLER-SOLVER CHANGE
 
       # CONDA-RATTLER-SOLVER CHANGE
