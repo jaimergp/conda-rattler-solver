@@ -24,13 +24,13 @@ requires-python = ">=3.8"
 dependencies = [
   "conda >=23.9.0",
   "conda-libmamba-solver >=23.9.0",
-  "py-rattler >=0.8"
+  "py-rattler >=0.8.2"
 ]
 
 [tool.pixi.dependencies]
 "conda" = ">=23.9.0"
 "conda-libmamba-solver" = ">=23.9.0"
-"py-rattler" = ">=0.8"
+"py-rattler" = ">=0.8.2"
 "pip" = "*"  # for pip install -e . only
 
 [project.urls]
