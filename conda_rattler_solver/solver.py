@@ -103,7 +103,7 @@ class RattlerSolver(LibMambaSolver):
         for attempt in range(1, self._max_attempts(in_state) + 1):
             log.debug("Starting solver attempt %s", attempt)
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt)
-            if solution is not None:
+            if solution is not None and not isinstance(solution, Exception):
                 break
             out_state = SolverOutputState(
                 solver_input_state=in_state,
@@ -123,9 +123,9 @@ class RattlerSolver(LibMambaSolver):
                 }
             )
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt + 1)
-            if solution is None:
-                exc = RattlerUnsatisfiableError("Could not find solution")
-                exc._allow_retry = False
+            if isinstance(solution, Exception) or solution is None:
+                exc = RattlerUnsatisfiableError(solution or "Could not find solution")
+                exc.allow_retry = False
                 raise exc
 
         # We didn't fail? Nice, let's return the calculated state
@@ -218,6 +218,7 @@ class RattlerSolver(LibMambaSolver):
             )
         except RattlerSolverError as exc:
             self._maybe_raise_for_problems(str(exc), out_state)
+            return exc
         else:
             out_state.conflicts.clear()
             return solution
@@ -234,6 +235,11 @@ class RattlerSolver(LibMambaSolver):
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1].strip(',')}")
             elif "cannot be installed because there are no viable options" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
+            elif "the constraint" in line and "cannot be fulfilled" in line:
+                unsatisfiable[words[2]] = MatchSpec(" ".join(words[2:-3]))
+            elif "can be installed with any of the following options" in line and "which" not in line:
+                position = line.index(" can be installed with")
+                unsatisfiable[words[0]] = MatchSpec(line[:position])
             elif "No candidates were found for" in line:
                 position = line.index("No candidates were found for ")
                 position += len("No candidates were found for ")
