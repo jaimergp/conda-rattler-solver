@@ -124,7 +124,9 @@ class RattlerSolver(LibMambaSolver):
             )
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt + 1)
             if solution is None:
-                raise RattlerUnsatisfiableError("Could not find solution")
+                exc = RattlerUnsatisfiableError("Could not find solution")
+                exc._allow_retry = False
+                raise exc
 
         # We didn't fail? Nice, let's return the calculated state
         self._export_solved_records(solution, out_state)
@@ -232,7 +234,11 @@ class RattlerSolver(LibMambaSolver):
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1].strip(',')}")
             elif "cannot be installed because there are no viable options" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
-
+            elif "No candidates were found for" in line:
+                position = line.index("No candidates were found for ")
+                position += len("No candidates were found for ")
+                spec = line[position:]
+                not_found[spec.split()[0]] = MatchSpec(spec)
         if not unsatisfiable and not_found:
             log.debug(
                 "Inferred PackagesNotFoundError %s from conflicts:\n%s",
