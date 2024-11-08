@@ -50,8 +50,6 @@ platforms = ["linux-64", "osx-arm64", "osx-64"] #, "win-64"]
 minversion = "6.0"
 addopts = [
   "--strict-markers",
-  "--xdoctest-modules",
-  "--xdoctest-style=google",
 ]
 
 markers = [
