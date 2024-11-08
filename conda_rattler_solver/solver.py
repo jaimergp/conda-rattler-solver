@@ -155,6 +155,7 @@ class RattlerSolver(LibMambaSolver):
             for (task_name, _), task_specs in tasks.items()
             for spec in task_specs
             if (task_name.startswith("ERASE") or task_name == "UPDATE")
+            and "*" not in MatchSpec(spec).name
         ]
 
         specs = []
@@ -165,16 +166,22 @@ class RattlerSolver(LibMambaSolver):
             if task_name in ("INSTALL", "UPDATE"):
                 specs.extend(task_specs)
             elif task_name.startswith("ERASE"):
-                constrained_specs.extend(
-                    [f"{MatchSpec(spec).name}<0.0.0a0" for spec in task_specs]
-                )
+                for spec in task_specs:
+                    match_spec = MatchSpec(spec)
+                    if "*" in match_spec.name:
+                        # TODO: Improve logic here; too many loops
+                        for pkg_name, pkg in in_state.installed.items():
+                            if match_spec.match(pkg):
+                                constrained_specs.append(f"{pkg_name}<0.0.0a0")
+                                remove.append(pkg_name)
+                    else:
+                        constrained_specs.append(f"{match_spec.name}<0.0.0a0")
             elif task_name == "ADD_PIN":
                 constrained_specs.extend(task_specs)
             elif task_name in "USERINSTALLED":
                 for spec in task_specs:
                     if MatchSpec(spec).name in remove:
                         continue
-
                     specs.append(spec)
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
@@ -193,6 +200,7 @@ class RattlerSolver(LibMambaSolver):
         # remove any packages that should be updated from the locked_packages
         locked_packages = [record for record in locked_packages if record.name not in remove]
 
+        # TODO: Remove once fixed upstream
         specs = [s.replace("=[", "[") for s in specs]
 
         # print("specs=", *[rattler.MatchSpec(s) for s in specs])
