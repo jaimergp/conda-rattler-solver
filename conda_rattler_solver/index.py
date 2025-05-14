@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Dict, Iterable, Tuple, Union
+from typing import TYPE_CHECKING
 
 import rattler
 from conda.base.constants import REPODATA_FN
@@ -12,10 +14,13 @@ from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
 from conda.common.url import percent_decode, remove_auth, split_anaconda_token
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
-from conda.models.records import PackageRecord
-from conda_libmamba_solver.state import IndexHelper
 
 from .utils import rattler_record_to_conda_record
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from conda.models.records import PackageRecord
 
 log = logging.getLogger(f"conda.{__name__}")
 
@@ -31,10 +36,10 @@ class _ChannelRepoInfo:
     local_json: str
 
 
-class RattlerIndexHelper(IndexHelper):
+class RattlerIndexHelper:
     def __init__(
         self,
-        channels: Iterable[Union[Channel, str]] = None,
+        channels: Iterable[Channel | str] = None,
         subdirs: Iterable[str] = None,
         repodata_fn: str = REPODATA_FN,
     ):
@@ -43,6 +48,10 @@ class RattlerIndexHelper(IndexHelper):
         self._repodata_fn = repodata_fn
 
         self._index = self._load_channels()
+
+    @property
+    def channels(self):
+        return [Channel(c) for c in self._channels]
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
         orig_key = key
@@ -64,7 +73,7 @@ class RattlerIndexHelper(IndexHelper):
                 f"Available keys: {list(self._index)}"
             ) from exc
 
-    def _fetch_channel(self, url: str) -> Tuple[str, os.PathLike]:
+    def _fetch_channel(self, url: str) -> tuple[str, os.PathLike]:
         channel = Channel.from_url(url)
         if not channel.subdir:
             raise ValueError(f"Channel URLs must specify a subdir! Provided: {url}")
@@ -97,7 +106,7 @@ class RattlerIndexHelper(IndexHelper):
             local_json=json_path,
         )
 
-    def _load_channels(self) -> Dict[str, _ChannelRepoInfo]:
+    def _load_channels(self) -> dict[str, _ChannelRepoInfo]:
         # 1. Obtain and deduplicate URLs from channels
         urls = []
         seen_noauth = set()
@@ -124,10 +133,15 @@ class RattlerIndexHelper(IndexHelper):
         Executor = (
             DummyExecutor
             if context.debug or context.repodata_threads == 1
-            else partial(ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads)
+            else partial(
+                ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads
+            )
         )
         with Executor() as executor:
-            jsons = {url: str(path) for (url, path) in executor.map(self._fetch_channel, urls)}
+            jsons = {
+                url: str(path)
+                for (url, path) in executor.map(self._fetch_channel, urls)
+            }
 
         # 3. Create repos in same order as `urls`
         index = {}

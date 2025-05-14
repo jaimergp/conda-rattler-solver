@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -9,11 +9,12 @@ import rattler
 from conda.base.constants import ChannelPriority
 from conda.base.context import context
 from conda.common.constants import NULL
-from conda.common.io import Spinner
 from conda.exceptions import PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
+from conda.reporters import get_spinner
 from conda_libmamba_solver.solver import LibMambaSolver
 from conda_libmamba_solver.state import SolverInputState, SolverOutputState
+from libmambapy.solver import Request
 from rattler import __version__ as rattler_version
 from rattler.exceptions import SolverError as RattlerSolverError
 
@@ -27,7 +28,7 @@ log = logging.getLogger(f"conda.{__name__}")
 
 class RattlerSolver(LibMambaSolver):
     @staticmethod
-    @lru_cache(maxsize=None)
+    @cache
     def user_agent():
         """
         Expose this identifier to allow conda to extend its user agent if required
@@ -68,17 +69,17 @@ class RattlerSolver(LibMambaSolver):
             *in_state.maybe_free_channel(),
         ]
 
-        with Spinner(
-            self._spinner_msg_metadata(all_channels),
-            enabled=not context.verbosity and not context.quiet,
-            json=context.json,
+        channels = self._collect_channel_list(in_state)
+        conda_build_channels = self._collect_channels_subdirs_from_conda_build(
+            seen=set(channels)
+        )
+        with get_spinner(
+            self._collect_all_metadata_spinner_message(channels, conda_build_channels),
         ):
             index = RattlerIndexHelper(all_channels, self.subdirs, self._repodata_fn)
 
-        with Spinner(
-            self._spinner_msg_solving(),
-            enabled=not context.verbosity and not context.quiet,
-            json=context.json,
+        with get_spinner(
+            self._solving_loop_spinner_message(),
         ):
             # This function will copy and mutate `out_state`
             # Make sure we get the latest copy to return the correct solution below
@@ -122,7 +123,9 @@ class RattlerSolver(LibMambaSolver):
                     if not record.is_unmanageable
                 }
             )
-            solution = self._solve_attempt(in_state, out_state, index, attempt=attempt + 1)
+            solution = self._solve_attempt(
+                in_state, out_state, index, attempt=attempt + 1
+            )
             if isinstance(solution, Exception) or solution is None:
                 exc = RattlerUnsatisfiableError(solution or "Could not find solution")
                 exc.allow_retry = False
@@ -143,18 +146,29 @@ class RattlerSolver(LibMambaSolver):
         index: RattlerIndexHelper,
         attempt: int = 0,
     ):
-        tasks = self._specs_to_tasks(in_state, out_state)
+        if in_state.is_removing:
+            jobs = self._specs_to_request_jobs_remove(in_state, out_state)
+        elif self._called_from_conda_build():
+            jobs = self._specs_to_request_jobs_conda_build(in_state, out_state)
+        else:
+            jobs = self._specs_to_request_jobs_add(in_state, out_state)
         virtual_packages = [
             rattler.GenericVirtualPackage(
                 rattler.PackageName(pkg.name), rattler.Version(pkg.version), pkg.build
             )
             for pkg in in_state.virtual.values()
         ]
+        # Request.Pin,
+        # Request.Install,
+        # Request.Update,
+        # Request.Keep,
+        # Request.Freeze,
+        # Request.Remove,
         remove = [
             MatchSpec(spec).name
-            for (task_name, _), task_specs in tasks.items()
+            for request, task_specs in jobs.items()
             for spec in task_specs
-            if (task_name.startswith("ERASE") or task_name == "UPDATE")
+            if request in (Request.Remove, Request.Update)
             and "*" not in MatchSpec(spec).name
         ]
 
@@ -162,10 +176,10 @@ class RattlerSolver(LibMambaSolver):
         constrained_specs = []
         pinned_packages = []
         locked_packages = []
-        for (task_name, _), task_specs in tasks.items():
-            if task_name in ("INSTALL", "UPDATE"):
+        for request, task_specs in jobs.items():
+            if request in (Request.Install, Request.Update):
                 specs.extend(task_specs)
-            elif task_name.startswith("ERASE"):
+            elif request == Request.Remove:
                 for spec in task_specs:
                     match_spec = MatchSpec(spec)
                     if "*" in match_spec.name:
@@ -176,9 +190,9 @@ class RattlerSolver(LibMambaSolver):
                                 remove.append(pkg_name)
                     else:
                         constrained_specs.append(f"{match_spec.name}<0.0.0a0")
-            elif task_name == "ADD_PIN":
+            elif request == Request.Pin:
                 constrained_specs.extend(task_specs)
-            elif task_name in "USERINSTALLED":
+            elif request == Request.Keep:
                 for spec in task_specs:
                     if MatchSpec(spec).name in remove:
                         continue
@@ -188,7 +202,7 @@ class RattlerSolver(LibMambaSolver):
                             locked_packages.append(
                                 self._prefix_record_to_rattler_prefix_record(record)
                             )
-            elif task_name == "LOCK":
+            elif request == Request.Freeze:
                 for spec in task_specs:
                     if MatchSpec(spec).name in remove:
                         continue
@@ -198,10 +212,9 @@ class RattlerSolver(LibMambaSolver):
                                 self._prefix_record_to_rattler_prefix_record(record)
                             )
         # remove any packages that should be updated from the locked_packages
-        locked_packages = [record for record in locked_packages if record.name not in remove]
-
-        # TODO: Remove once fixed upstream
-        specs = [s.replace("=[", "[") for s in specs]
+        locked_packages = [
+            record for record in locked_packages if record.name not in remove
+        ]
 
         # print("specs=", *[rattler.MatchSpec(s) for s in specs])
         # print("locked_packages=", *locked_packages)
@@ -212,7 +225,7 @@ class RattlerSolver(LibMambaSolver):
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
-                    specs=[rattler.MatchSpec(s) for s in specs],
+                    specs=[rattler.MatchSpec(str(s)) for s in specs],
                     sparse_repodata=[info.repo for info in index._index.values()],
                     locked_packages=locked_packages,
                     pinned_packages=pinned_packages,
@@ -239,13 +252,18 @@ class RattlerSolver(LibMambaSolver):
             words = line.split()
             if "is locked, but another version is required as reported above" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
-            elif "which cannot be installed because there are no viable options" in line:
+            elif (
+                "which cannot be installed because there are no viable options" in line
+            ):
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1].strip(',')}")
             elif "cannot be installed because there are no viable options" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
             elif "the constraint" in line and "cannot be fulfilled" in line:
                 unsatisfiable[words[2]] = MatchSpec(" ".join(words[2:-3]))
-            elif "can be installed with any of the following options" in line and "which" not in line:
+            elif (
+                "can be installed with any of the following options" in line
+                and "which" not in line
+            ):
                 position = line.index(" can be installed with")
                 unsatisfiable[words[0]] = MatchSpec(line[:position])
             elif "No candidates were found for" in line:
@@ -289,7 +307,7 @@ class RattlerSolver(LibMambaSolver):
             conda_record = rattler_record_to_conda_record(rattler_record)
             out_state.records[conda_record.name] = conda_record
 
-    @lru_cache(maxsize=None)
+    @cache
     def _prefix_record_to_rattler_prefix_record(self, record):
         # TODO: This is a hack to get the installed packages into the solver
         # but rattler doesn't allow PrefixRecords to be built through the API yet

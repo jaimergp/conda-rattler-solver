@@ -22,8 +22,8 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-  "conda >=23.9.0",
-  "conda-libmamba-solver >=23.9.0",
+  "conda >=25.3.0",
+  "conda-libmamba-solver >=25.3.0",
   "py-rattler >=0.11.0"
 ]
 
@@ -41,8 +41,8 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64", "osx-64"] #, "win-64"]
 
 [tool.pixi.dependencies]
-"conda" = ">=23.9.0"
-"conda-libmamba-solver" = ">=23.9.0"
+"conda" = ">=25.3.0"
+"conda-libmamba-solver" = ">=25.3.0"
 "py-rattler" = ">=0.11.0"
 
 [tool.pixi.pypi-dependencies]
