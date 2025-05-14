@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
@@ -24,14 +24,8 @@ requires-python = ">=3.8"
 dependencies = [
   "conda >=23.9.0",
   "conda-libmamba-solver >=23.9.0",
-  "py-rattler >=0.8.2"
+  "py-rattler >=0.11.0"
 ]
-
-[tool.pixi.dependencies]
-"conda" = ">=23.9.0"
-"conda-libmamba-solver" = ">=23.9.0"
-"py-rattler" = ">=0.8.2"
-"pip" = "*"  # for pip install -e . only
 
 [project.urls]
 homepage = "https://github.com/jaimergp/conda-rattler-solver"
@@ -46,45 +40,106 @@ source = "vcs"
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64", "osx-64"] #, "win-64"]
 
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = [
-  "--strict-markers",
-]
+[tool.pixi.dependencies]
+"conda" = ">=23.9.0"
+"conda-libmamba-solver" = ">=23.9.0"
+"py-rattler" = ">=0.11.0"
 
-markers = [
-  "integration: integration tests that usually require an internet connect",
-  "slow: slow running tests",
+[tool.pixi.pypi-dependencies]
+conda-rattler-solver = { path  = ".", editable = true }
+
+[tool.pixi.feature.build]
+dependencies = { conda-build = "*" }
+tasks = { build = "conda build recipe" }
+
+[tool.pixi.feature.docs.tasks]
+docs = { cmd = "python -m sphinx.cmd.build -M dirhtml . _build", cwd = "docs" }
+serve = { cmd = "python -m http.server", cwd = "docs/_build/dirhtml" }
+clean = { cmd = "rm -rf _build", cwd = "docs" }
+
+[tool.pixi.feature.docs.dependencies]
+python = "3.10.*"
+conda-sphinx-theme = "*"
+linkify-it-py = "*"
+myst-parser = "*"
+sphinx = "*"
+sphinx-copybutton = "*"
+sphinx-design = "*"
+sphinx-reredirects = "*"
+sphinx-sitemap = "*"
+sphinxcontrib-programoutput = "*"
+
+[tool.pixi.feature.test.tasks]
+test = 'python -m pytest --cov=conda_lockfiles'
+pre-commit = 'pre-commit'
+
+[tool.pixi.feature.test.dependencies]
+pytest = "7.4.3.*"
+pytest-mock = "3.12.0.*"
+pre-commit = "*"
+pytest-cov = ">=6.1.1,<7"
+
+[tool.pixi.feature.py39.dependencies]
+python = "3.9.*"
+
+[tool.pixi.feature.py310.dependencies]
+python = "3.10.*"
+
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
+
+[tool.pixi.environments]
+dev = ["py39"]
+build = ["build"]
+docs = ["docs"]
+test-py39 = ["test", "py39"]
+test-py310 = ["test", "py310"]
+test-py311 = ["test", "py311"]
+test-py312 = ["test", "py312"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "conda_rattler_solver/_version.py"
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+omit = ["conda_rattler_solver/_version.py"]
+show_missing = true
+skip_covered = true
+sort = "Miss"
+
+[tool.pytest.ini_options]
+addopts = [
+  "--color=yes",
+  # "--cov=conda_lockfiles",   # passed in test runner scripts instead (avoid debugger)
+  "--cov-append",
+  "--cov-branch",
+  "--cov-report=term",  # print summary table to screen
+  "--cov-report=xml",  # for codecov/codecov-action upload
+  "--durations=16",  # show 16 slowest tests
+  "--strict-markers",
+  "--tb=native",
+  "-vv",
 ]
 
 [tool.ruff]
-exclude = ["conda_libmamba_solver/mamba_utils.py", "tests/data/"]
-target-version = "py38"
-line-length = 99
+target-version = "py39"
 
 [tool.ruff.lint]
-# E, W = pycodestyle errors and warnings
-# F = pyflakes
-# I = isort
-# D = pydocstyle
-# UP = pyupgrade
-# ISC = flake8-implicit-str-concat
-# TCH = flake8-type-checking
-# T10 = flake8-debugger
-# FA = flake8-future-annotations
-# see also https://docs.astral.sh/ruff/rules/
-select = ["E", "W", "F", "I", "D1", "UP", "ISC", "TCH", "T10", "FA"]
-# E402 module level import not at top of file
-# E501 line too long
-# E722 do not use bare 'except'
-# E731 do not assign a lambda expression, use a def
-# D101 Missing docstring in public class
-# D102 Missing docstring in public method
-# D103 Missing docstring in public function
-# D104 Missing docstring in public package
-# D105 Missing docstring in magic method
-# D107 Missing docstring in `__init__`
-ignore = ["E402", "E501", "E722", "E731", "D101", "D102", "D103", "D104", "D105", "D107"]
-extend-per-file-ignores = {"docs/*" = ["D1"], "tests/*" = ["D1"]}
-pydocstyle = {convention = "pep257"}
 flake8-type-checking = {exempt-modules = [], strict = true}
+# see https://docs.astral.sh/ruff/rules/
+select = [
+  # "D1",  # pydocstyle
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "FA",  # flake8-future-annotations
+  "I",  # isort
+  "ISC",  # flake8-implicit-str-concat
+  "RUF100",  # Unused noqa directive
+  "T10",  # flake8-debugger
+  "TCH",  # flake8-type-checking
+  "UP",  # pyupgrade
+  "W",  # pycodestyle warnings
+]
