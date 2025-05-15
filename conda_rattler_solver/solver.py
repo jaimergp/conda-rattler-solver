@@ -229,9 +229,10 @@ class RattlerSolver(LibMambaSolver):
         dumped = json.dumps(solve_kwargs, indent=2, default=str, sort_keys=True)
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
-        with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
-            f.write(str(in_state.installed.keys()))
-            f.write(dumped + "\n----\n")
+        if not os.environ.get("CI"):
+            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
+                f.write(str(in_state.installed.keys()))
+                f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
@@ -475,9 +476,10 @@ class RattlerSolver(LibMambaSolver):
         dumped = json.dumps(dumped, indent=2, default=str, sort_keys=True)
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
-        with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
-            f.write(str(in_state.installed.keys()))
-            f.write(dumped + "\n----\n")
+        if not os.environ.get("CI"):
+            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
+                f.write(str(in_state.installed.keys()))
+                f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
