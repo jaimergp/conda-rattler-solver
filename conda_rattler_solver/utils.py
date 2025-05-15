@@ -59,6 +59,7 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         timestamp=timestamp,
         # date=record.date,
         size=record.size or 0,
+        python_site_packages_path=record.python_site_packages_path,
     )
 
 
