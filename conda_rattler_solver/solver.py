@@ -360,8 +360,11 @@ class RattlerSolver(LibMambaSolver):
                 pyver = ".".join(installed.version.split(".")[:2])
                 constraints.append(f"python {pyver}.*")
             elif history and not in_state.is_removing:
+                # IMO, we should always try to preserve historic specs, unless removed
                 # Enabling this for removals makes conda/conda's
                 # /tests/test_create.py::test_dont_remove_conda_{1,2} fail
+                # but makes tests/test_create.py::test_create_only_deps_flag pass
+                # tests/test_create.py::test_tarball_install_and_bad_metadata fails either way
                 if conflicting and history.strictness == 3:
                     # relax name-version-build (strictness=3) history specs that cause conflicts
                     # this is called neutering and makes test_neutering_of_historic_specs pass
