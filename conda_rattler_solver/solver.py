@@ -230,9 +230,13 @@ class RattlerSolver(LibMambaSolver):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
         if not os.environ.get("CI"):
-            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
-                f.write(str(in_state.installed.keys()))
-                f.write(dumped + "\n----\n")
+            with open(
+                "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
+            ) as f:
+                f.write(f"Removing: {in_state.is_removing}\n")
+                f.write(f"Installed: {in_state.installed.keys()}\n")
+                f.write(f"History: {in_state.history.keys()}\n")
+                f.write(f"Input: {dumped}\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
@@ -248,10 +252,21 @@ class RattlerSolver(LibMambaSolver):
                 )
             )
         except RattlerSolverError as exc:
+            if not os.environ.get("CI"):
+                with open(
+                    "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
+                ) as f:
+                    f.write(f"Exception: {exc}\n-------\n")
             self._maybe_raise_for_problems(str(exc), out_state)
             return exc
         else:
             out_state.conflicts.clear()
+            if not os.environ.get("CI"):
+                with open(
+                    "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
+                ) as f:
+                    records = "\n- ".join([str(x) for x in solution])
+                    f.write(f"Solution:\n- {records}\n-------\n")
             return solution
 
     def _collect_specs(
@@ -259,6 +274,9 @@ class RattlerSolver(LibMambaSolver):
         in_state: SolverInputState,
         out_state: SolverOutputState,
     ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
+        # if in_state.is_removing:
+        #     return self._collect_specs_for_remove(in_state, out_state)
+
         specs: list[rattler.MatchSpec] = []
         constraints: list[rattler.MatchSpec] = []
         locked_packages: list[rattler.PackageRecord] = []
@@ -287,8 +305,7 @@ class RattlerSolver(LibMambaSolver):
                 *in_state.pinned,
                 *in_state.do_not_remove,
             )
-            if pkg in in_state.installed
-            and pkg not in remove
+            if pkg in in_state.installed and pkg not in remove
         }
 
         # Fast-track python version changes (Part 1/2)
@@ -308,9 +325,6 @@ class RattlerSolver(LibMambaSolver):
         for name in out_state.specs:
             if "*" in name:
                 continue
-            if name in remove:
-                constraints.append(f"{name}<0.0.0dev0")
-                continue
 
             installed: PackageRecord = in_state.installed.get(name)
             requested: MatchSpec = in_state.requested.get(name)
@@ -318,7 +332,17 @@ class RattlerSolver(LibMambaSolver):
             pinned: MatchSpec = in_state.pinned.get(name)
             conflicting: MatchSpec = out_state.conflicts.get(name)
 
-            if name in user_installed and not in_state.prune and not conflicting and not requested and name not in in_state.always_update:
+            if name in remove and (requested or not conflicting):
+                constraints.append(f"{name}<0.0.0dev0")
+                continue
+
+            if (
+                name in user_installed
+                and not in_state.prune
+                and not conflicting
+                and not requested
+                and name not in in_state.always_update
+            ):
                 locked_packages.append(installed)
 
             if pinned and not pinned.is_name_only_spec:
@@ -326,7 +350,7 @@ class RattlerSolver(LibMambaSolver):
 
             if requested:
                 specs.append(requested)
-            elif name in in_state.always_update:
+            elif name in in_state.always_update and not conflicting:
                 specs.append(name)
             # These specs are "implicit"; the solver logic massages them for better UX
             # as long as they don't cause trouble
@@ -335,7 +359,9 @@ class RattlerSolver(LibMambaSolver):
             elif name == "python" and installed and not pinned:
                 pyver = ".".join(installed.version.split(".")[:2])
                 constraints.append(f"python {pyver}.*")
-            elif history:
+            elif history and not in_state.is_removing:
+                # Enabling this for removals makes conda/conda's
+                # /tests/test_create.py::test_dont_remove_conda_{1,2} fail
                 if conflicting and history.strictness == 3:
                     # relax name-version-build (strictness=3) history specs that cause conflicts
                     # this is called neutering and makes test_neutering_of_historic_specs pass
@@ -364,10 +390,71 @@ class RattlerSolver(LibMambaSolver):
                             break
                 if lock:
                     pinned_packages.append(installed)
-                # enabling this else branch makes
-                # conda/conda's tests/core/test_solve.py::test_freeze_deps_1[libmamba] fail
-                # else:
-                #     tasks[Request.Keep].append(name)
+                elif not in_state.is_removing:
+                    # enabling this else branch makes us fail an unmodified
+                    # conda/conda's tests/core/test_solve.py::test_freeze_deps_1
+                    # BUT it's also necessary to pass
+                    # conda/conda's tests/test_create.py::test_update_with_pinned_packages
+                    # if we enable it for removals too, it also makes these ones fail:
+                    # - tests/test_create.py::test_dont_remove_conda_1
+                    # - tests/test_create.py::test_dont_remove_conda_2
+                    # Still, it doesn't allow tests/test_create.py::test_tarball_install_and_bad_metadata
+                    # to pass. Haven't figured out yet how to convince rattler to keep these packages.
+                    specs.append(installed.name)
+                    if installed not in locked_packages:
+                        locked_packages.append(installed)
+        return {
+            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "constraints": [
+                self._match_spec_to_rattler_match_spec(spec) for spec in constraints
+            ],
+            "locked_packages": [
+                self._prefix_record_to_rattler_prefix_record(record)
+                for record in locked_packages
+            ],
+            "pinned_packages": [
+                self._prefix_record_to_rattler_prefix_record(record)
+                for record in pinned_packages
+            ],
+        }
+
+    def _collect_specs_for_remove(  # WIP
+        self,
+        in_state: SolverInputState,
+        out_state: SolverOutputState,
+    ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
+        specs: list[rattler.MatchSpec] = []
+        constraints: list[rattler.MatchSpec] = []
+        locked_packages: list[rattler.PackageRecord] = []
+        pinned_packages: list[rattler.PackageRecord] = []
+
+        # conda remove allows globbed names; make sure we don't install those!
+        remove = set()
+        for requested_spec in in_state.requested.values():
+            if "*" in requested_spec.name:
+                for installed_name, installed_record in in_state.installed.items():
+                    if requested_spec.match(installed_record):
+                        remove.add(installed_name)
+            else:
+                remove.add(requested_spec.name)
+
+        for name in out_state.specs:
+            if "*" in name:
+                continue
+
+            installed: PackageRecord = in_state.installed.get(name)
+            history: MatchSpec = in_state.history.get(name)
+            pinned: MatchSpec = in_state.pinned.get(name)
+            conflicting: MatchSpec = out_state.conflicts.get(name)
+
+            if name in remove:
+                constraints.append(f"{name}<0.0.0dev0")
+                continue
+
+            if installed:
+                specs.append(name)
+                locked_packages.append(installed)
+
         return {
             "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
             "constraints": [
@@ -477,7 +564,9 @@ class RattlerSolver(LibMambaSolver):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
         if not os.environ.get("CI"):
-            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
+            with open(
+                "/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a"
+            ) as f:
                 f.write(str(in_state.installed.keys()))
                 f.write(dumped + "\n----\n")
         try:
