@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from functools import cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import TYPE_CHECKING
 
 import rattler
 from conda.base.constants import ChannelPriority
@@ -23,13 +26,22 @@ from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
 from .utils import rattler_record_to_conda_record
 
+if TYPE_CHECKING:
+    from boltons.setutils import IndexedSet
+    from conda.auxlib import _Null
+    from conda.base.constants import (
+        DepsModifier,
+        UpdateModifier,
+    )
+    from conda.models.records import PackageRecord
+
 log = logging.getLogger(f"conda.{__name__}")
 
 
 class RattlerSolver(LibMambaSolver):
     @staticmethod
     @cache
-    def user_agent():
+    def user_agent() -> str:
         """
         Expose this identifier to allow conda to extend its user agent if required
         """
@@ -37,13 +49,13 @@ class RattlerSolver(LibMambaSolver):
 
     def solve_final_state(
         self,
-        update_modifier=NULL,
-        deps_modifier=NULL,
-        prune=NULL,
-        ignore_pinned=NULL,
-        force_remove=NULL,
-        should_retry_solve=False,
-    ):
+        update_modifier: UpdateModifier | _Null = NULL,
+        deps_modifier: DepsModifier | _Null = NULL,
+        prune: bool | _Null = NULL,
+        ignore_pinned: bool | _Null = NULL,
+        force_remove: bool | _Null = NULL,
+        should_retry_solve: bool = False,
+    ) -> IndexedSet[PackageRecord]:
         in_state = SolverInputState(
             prefix=self.prefix,
             requested=self.specs_to_add or self.specs_to_remove,
@@ -98,7 +110,7 @@ class RattlerSolver(LibMambaSolver):
         in_state: SolverInputState,
         out_state: SolverOutputState,
         index: RattlerIndexHelper,
-    ):
+    ) -> SolverOutputState:
         solution = None
         out_state.check_for_pin_conflicts(index)
         for attempt in range(1, self._max_attempts(in_state) + 1):
@@ -145,7 +157,7 @@ class RattlerSolver(LibMambaSolver):
         out_state: SolverOutputState,
         index: RattlerIndexHelper,
         attempt: int = 0,
-    ):
+    ) -> RattlerSolverError | list[rattler.RepoDataRecord]:
         if in_state.is_removing:
             jobs = self._specs_to_request_jobs_remove(in_state, out_state)
             jobs = {Request.Remove: jobs.pop(Request.Remove, ()), **jobs}

@@ -136,6 +136,7 @@ addopts = [
 target-version = "py39"
 
 [tool.ruff.lint]
+line-length = "99"
 flake8-type-checking = {exempt-modules = [], strict = true}
 # see https://docs.astral.sh/ruff/rules/
 select = [
