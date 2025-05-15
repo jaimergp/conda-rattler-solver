@@ -256,6 +256,8 @@ class RattlerSolver(LibMambaSolver):
         not_found = {}
         for line in problems.splitlines():
             line = line.strip(" ─│└├")
+            if line.startswith("Cannot solve the request because of:"):
+                line = line.split(":", 1)[1]
             words = line.split()
             if "is locked, but another version is required as reported above" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
