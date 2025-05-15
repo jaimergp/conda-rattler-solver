@@ -265,7 +265,7 @@ class RattlerSolver(LibMambaSolver):
                 with open(
                     "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
                 ) as f:
-                    records = "\n- ".join([str(x) for x in solution])
+                    records = "\n- ".join([str(x.channel) + "::" + str(x) for x in solution])
                     f.write(f"Solution:\n- {records}\n-------\n")
             return solution
 
@@ -274,24 +274,13 @@ class RattlerSolver(LibMambaSolver):
         in_state: SolverInputState,
         out_state: SolverOutputState,
     ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
-        # if in_state.is_removing:
-        #     return self._collect_specs_for_remove(in_state, out_state)
+        if in_state.is_removing:
+            return self._collect_specs_for_remove(in_state, out_state)
 
         specs: list[rattler.MatchSpec] = []
         constraints: list[rattler.MatchSpec] = []
         locked_packages: list[rattler.PackageRecord] = []
         pinned_packages: list[rattler.PackageRecord] = []
-
-        # conda remove allows globbed names; make sure we don't install those!
-        remove = set()
-        if in_state.is_removing:
-            for requested_spec in in_state.requested.values():
-                if "*" in requested_spec.name:
-                    for installed_name, installed_record in in_state.installed.items():
-                        if requested_spec.match(installed_record):
-                            remove.add(installed_name)
-                else:
-                    remove.add(requested_spec.name)
 
         # Protect history and aggressive updates from being uninstalled if possible. From libsolv
         # docs: "The matching installed packages are considered to be installed by a user, thus not
@@ -305,7 +294,7 @@ class RattlerSolver(LibMambaSolver):
                 *in_state.pinned,
                 *in_state.do_not_remove,
             )
-            if pkg in in_state.installed and pkg not in remove
+            if pkg in in_state.installed
         }
 
         # Fast-track python version changes (Part 1/2)
@@ -332,10 +321,6 @@ class RattlerSolver(LibMambaSolver):
             pinned: MatchSpec = in_state.pinned.get(name)
             conflicting: MatchSpec = out_state.conflicts.get(name)
 
-            if name in remove and (requested or not conflicting):
-                constraints.append(f"{name}<0.0.0dev0")
-                continue
-
             if (
                 name in user_installed
                 and not in_state.prune
@@ -359,12 +344,7 @@ class RattlerSolver(LibMambaSolver):
             elif name == "python" and installed and not pinned:
                 pyver = ".".join(installed.version.split(".")[:2])
                 constraints.append(f"python {pyver}.*")
-            elif history and not in_state.is_removing:
-                # IMO, we should always try to preserve historic specs, unless removed
-                # Enabling this for removals makes conda/conda's
-                # /tests/test_create.py::test_dont_remove_conda_{1,2} fail
-                # but makes tests/test_create.py::test_create_only_deps_flag pass
-                # tests/test_create.py::test_tarball_install_and_bad_metadata fails either way
+            elif history:
                 if conflicting and history.strictness == 3:
                     # relax name-version-build (strictness=3) history specs that cause conflicts
                     # this is called neutering and makes test_neutering_of_historic_specs pass
@@ -393,16 +373,7 @@ class RattlerSolver(LibMambaSolver):
                             break
                 if lock:
                     pinned_packages.append(installed)
-                elif not in_state.is_removing:
-                    # enabling this else branch makes us fail an unmodified
-                    # conda/conda's tests/core/test_solve.py::test_freeze_deps_1
-                    # BUT it's also necessary to pass
-                    # conda/conda's tests/test_create.py::test_update_with_pinned_packages
-                    # if we enable it for removals too, it also makes these ones fail:
-                    # - tests/test_create.py::test_dont_remove_conda_1
-                    # - tests/test_create.py::test_dont_remove_conda_2
-                    # Still, it doesn't allow tests/test_create.py::test_tarball_install_and_bad_metadata
-                    # to pass. Haven't figured out yet how to convince rattler to keep these packages.
+                else:
                     specs.append(installed.name)
                     if installed not in locked_packages:
                         locked_packages.append(installed)
@@ -453,10 +424,18 @@ class RattlerSolver(LibMambaSolver):
             if name in remove:
                 constraints.append(f"{name}<0.0.0dev0")
                 continue
-
+            if pinned:
+                if pinned.is_name_only_spec and installed:
+                    pinned_packages.append(installed)
+                else:
+                    constraints.append(pinned)
             if installed:
-                specs.append(name)
-                locked_packages.append(installed)
+                if name in in_state.aggressive_updates:
+                    specs.append(name)
+                elif not conflicting:
+                    if history:  # TODO: Do this even if not installed (e.g. force removed previously?)
+                        specs.append(history)
+                    locked_packages.append(installed)
 
         return {
             "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
