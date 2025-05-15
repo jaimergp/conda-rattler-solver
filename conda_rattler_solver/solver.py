@@ -241,7 +241,7 @@ class RattlerSolver(LibMambaSolver):
                         else rattler.ChannelPriority.Disabled
                     ),
                     strategy="highest",
-                    constraints=[rattler.MatchSpec(s) for s in constrained_specs],
+                    constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
                 )
             )
         except RattlerSolverError as exc:
