@@ -148,6 +148,7 @@ class RattlerSolver(LibMambaSolver):
     ):
         if in_state.is_removing:
             jobs = self._specs_to_request_jobs_remove(in_state, out_state)
+            jobs = {Request.Remove: jobs.pop(Request.Remove, ()), **jobs}
         elif self._called_from_conda_build():
             jobs = self._specs_to_request_jobs_conda_build(in_state, out_state)
         else:
@@ -189,6 +190,7 @@ class RattlerSolver(LibMambaSolver):
                                 constrained_specs.append(f"{pkg_name}<0.0.0a0")
                                 remove.append(pkg_name)
                     else:
+                        remove.append(match_spec.name)
                         constrained_specs.append(f"{match_spec.name}<0.0.0a0")
             elif request == Request.Pin:
                 constrained_specs.extend(task_specs)
@@ -226,15 +228,18 @@ class RattlerSolver(LibMambaSolver):
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
                     specs=[
-                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
+                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "["))
+                        for s in specs
                     ],
                     sparse_repodata=[info.repo for info in index._index.values()],
                     locked_packages=locked_packages,
                     pinned_packages=pinned_packages,
                     virtual_packages=virtual_packages,
-                    channel_priority=rattler.ChannelPriority.Strict
-                    if context.channel_priority == ChannelPriority.STRICT
-                    else rattler.ChannelPriority.Disabled,
+                    channel_priority=(
+                        rattler.ChannelPriority.Strict
+                        if context.channel_priority == ChannelPriority.STRICT
+                        else rattler.ChannelPriority.Disabled
+                    ),
                     strategy="highest",
                     constraints=[rattler.MatchSpec(s) for s in constrained_specs],
                 )
@@ -305,6 +310,7 @@ class RattlerSolver(LibMambaSolver):
         out_state.conflicts.update(unsatisfiable)
 
     def _export_solved_records(self, records, out_state):
+        out_state.records.clear()
         for rattler_record in records:
             conda_record = rattler_record_to_conda_record(rattler_record)
             out_state.records[conda_record.name] = conda_record
