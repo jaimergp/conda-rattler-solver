@@ -74,10 +74,23 @@ test = 'python -m pytest --cov=conda_lockfiles'
 pre-commit = 'pre-commit'
 
 [tool.pixi.feature.test.dependencies]
-pytest = "7.4.3.*"
-pytest-mock = "3.12.0.*"
-pre-commit = "*"
-pytest-cov = ">=6.1.1,<7"
+anaconda-client = "*"
+coverage = "*"
+flask = ">=2.2"  # jlap pytest fixture
+git = "*"
+importlib_resources = ">=5.10"  # only necessary for Python < 3.12
+pexpect = "*"
+pip = "*"
+pytest = "*"
+pytest-cov = "*"
+pytest-mock = "*"
+pytest-rerunfailures = "*"
+pytest-split = "*"
+pytest-timeout = "*"
+pytest-xprocess = "*"
+responses = "*"
+tomli = "*"  # for coverage pyproject.toml, only necessary for Python <= 3.11.0a6
+werkzeug = ">=2.2"  # jlap pytest fixture
 
 [tool.pixi.feature.py39.dependencies]
 python = "3.9.*"
