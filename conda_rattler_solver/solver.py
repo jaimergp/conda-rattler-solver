@@ -230,6 +230,7 @@ class RattlerSolver(LibMambaSolver):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
         with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
+            f.write(str(in_state.installed.keys()))
             f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
@@ -270,6 +271,8 @@ class RattlerSolver(LibMambaSolver):
                     for installed_name, installed_record in in_state.installed.items():
                         if requested_spec.match(installed_record):
                             remove.add(installed_name)
+                else:
+                    remove.add(requested_spec.name)
 
         # Protect history and aggressive updates from being uninstalled if possible. From libsolv
         # docs: "The matching installed packages are considered to be installed by a user, thus not
@@ -305,7 +308,7 @@ class RattlerSolver(LibMambaSolver):
             if "*" in name:
                 continue
             if name in remove:
-                constraints.append(rattler.MatchSpec(f"{name}<0.0.0dev0"))
+                constraints.append(f"{name}<0.0.0dev0")
                 continue
 
             installed: PackageRecord = in_state.installed.get(name)
@@ -461,19 +464,20 @@ class RattlerSolver(LibMambaSolver):
             record for record in locked_packages if record.name not in remove
         ]
 
-        # dumped = dict(
-        #     specs=[
-        #         rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
-        #     ],
-        #     locked_packages=locked_packages,
-        #     pinned_packages=pinned_packages,
-        #     constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
-        # )
-        # dumped = json.dumps(dumped, indent=2, default=str, sort_keys=True)
-        # if log.isEnabledFor(logging.DEBUG):
-        #     log.debug("Solver input:\n%s", dumped)
-        # with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
-        #     f.write(dumped + "\n----\n")
+        dumped = dict(
+            specs=[
+                rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
+            ],
+            locked_packages=locked_packages,
+            pinned_packages=pinned_packages,
+            constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
+        )
+        dumped = json.dumps(dumped, indent=2, default=str, sort_keys=True)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Solver input:\n%s", dumped)
+        with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
+            f.write(str(in_state.installed.keys()))
+            f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
