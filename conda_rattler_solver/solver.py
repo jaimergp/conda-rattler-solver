@@ -265,7 +265,9 @@ class RattlerSolver(LibMambaSolver):
                 with open(
                     "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
                 ) as f:
-                    records = "\n- ".join([str(x.channel) + "::" + str(x) for x in solution])
+                    records = "\n- ".join(
+                        [str(x.channel) + "::" + str(x) for x in solution]
+                    )
                     f.write(f"Solution:\n- {records}\n-------\n")
             return solution
 
