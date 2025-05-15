@@ -225,7 +225,9 @@ class RattlerSolver(LibMambaSolver):
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
-                    specs=[rattler.MatchSpec(str(s)) for s in specs],
+                    specs=[
+                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
+                    ],
                     sparse_repodata=[info.repo for info in index._index.values()],
                     locked_packages=locked_packages,
                     pinned_packages=pinned_packages,
