@@ -70,7 +70,7 @@ sphinx-sitemap = "*"
 sphinxcontrib-programoutput = "*"
 
 [tool.pixi.feature.test.tasks]
-test = 'python -m pytest --cov=conda_lockfiles'
+test = { cmd = "python -m pytest", env = { CONDA_TEST_SOLVERS = "rattler" } }
 pre-commit = 'pre-commit'
 
 [tool.pixi.feature.test.dependencies]
@@ -126,11 +126,6 @@ sort = "Miss"
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
-  # "--cov=conda_lockfiles",   # passed in test runner scripts instead (avoid debugger)
-  "--cov-append",
-  "--cov-branch",
-  "--cov-report=term",  # print summary table to screen
-  "--cov-report=xml",  # for codecov/codecov-action upload
   "--durations=16",  # show 16 slowest tests
   "--strict-markers",
   "--tb=native",
