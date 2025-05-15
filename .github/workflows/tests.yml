@@ -109,9 +109,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
-          # repository: wolfv/conda  # TEMPORARY
-          # ref: test-rattler  # TEMPORARY
+          # repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
+          repository: jaimergp/conda  # TEMPORARY
+          ref: test-rattler  # TEMPORARY
           path: conda  # CONDA-RATTLER-SOLVER CHANGE
 
       # CONDA-RATTLER-SOLVER CHANGE
@@ -260,9 +260,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
-          # repository: wolfv/conda  # TEMPORARY
-          # ref: test-rattler  # TEMPORARY
+          # repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
+          repository: jaimergp/conda  # TEMPORARY
+          ref: test-rattler  # TEMPORARY
           path: conda  # CONDA-RATTLER-SOLVER CHANGE
 
       # CONDA-RATTLER-SOLVER CHANGE
@@ -315,6 +315,11 @@ jobs:
 
       - name: Conda List
         run: conda list --show-channel-urls
+
+      - name: Setup Shells
+        # for tests/shell, so only necessary for integration tests
+        if: matrix.test-type == 'integration'
+        run: sudo apt update && sudo apt install ash csh fish tcsh xonsh zsh
 
       - name: Run Tests
         working-directory: conda  # CONDA-RATTLER-SOLVER CHANGE
@@ -541,7 +546,7 @@ jobs:
         with:
           fetch-depth: 0
           # repository: conda/conda  # CONDA-RATTLER-SOLVER CHANGE
-          repository: wolfv/conda  # TEMPORARY
+          repository: jaimergp/conda  # TEMPORARY
           ref: test-rattler  # TEMPORARY
           path: conda  # CONDA-RATTLER-SOLVER CHANGE
 
