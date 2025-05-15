@@ -210,7 +210,8 @@ class RattlerSolver(LibMambaSolver):
                 for spec in task_specs:
                     if MatchSpec(spec).name in remove:
                         continue
-                    specs.append(spec)
+                    if not in_state.is_removing:
+                        specs.append(spec)
                     for record in in_state.installed.values():
                         if MatchSpec(spec).match(record):
                             locked_packages.append(
