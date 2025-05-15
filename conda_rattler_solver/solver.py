@@ -3,16 +3,20 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import sys
 from functools import cache
+from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
 
 import rattler
-from conda.base.constants import ChannelPriority
+from conda.base.constants import REPODATA_FN, ChannelPriority
 from conda.base.context import context
 from conda.common.constants import NULL
-from conda.exceptions import PackagesNotFoundError
+from conda.core.solve import Solver
+from conda.exceptions import CondaValueError, PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
 from conda_libmamba_solver.solver import LibMambaSolver
@@ -27,12 +31,16 @@ from .index import RattlerIndexHelper
 from .utils import rattler_record_to_conda_record
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from boltons.setutils import IndexedSet
     from conda.auxlib import _Null
     from conda.base.constants import (
         DepsModifier,
         UpdateModifier,
     )
+    from conda.common.path import PathType
+    from conda.models.channel import Channel
     from conda.models.records import PackageRecord
 
 log = logging.getLogger(f"conda.{__name__}")
@@ -46,6 +54,44 @@ class RattlerSolver(LibMambaSolver):
         Expose this identifier to allow conda to extend its user agent if required
         """
         return f"conda-rattler-solver/{__version__} py-rattler/{rattler_version}"
+
+    def __init__(
+        self,
+        prefix: PathType,
+        channels: Iterable[Channel | str],
+        subdirs: Iterable[str] = (),
+        specs_to_add: Iterable[MatchSpec | str] = (),
+        specs_to_remove: Iterable[MatchSpec | str] = (),
+        repodata_fn: str = REPODATA_FN,
+        command: str | _Null = NULL,
+    ):
+        if specs_to_add and specs_to_remove:
+            raise ValueError(
+                "Only one of `specs_to_add` and `specs_to_remove` can be set at a time"
+            )
+        if specs_to_remove and command is NULL:
+            command = "remove"
+
+        super().__init__(
+            os.fspath(prefix),
+            channels,
+            subdirs=subdirs,
+            specs_to_add=specs_to_add,
+            specs_to_remove=specs_to_remove,
+            repodata_fn=repodata_fn,
+            command=command,
+        )
+        if self.subdirs is NULL or not self.subdirs:
+            self.subdirs = context.subdirs
+        if "noarch" not in self.subdirs:
+            # Problem: Conda build generates a custom index which happens to "forget" about
+            # noarch on purpose when creating the build/host environments, since it merges
+            # both as if they were all in the native subdir. This causes package-not-found
+            # errors because we are not using the patched index.
+            # Fix: just add noarch to subdirs because it should always be there anyway.
+            self.subdirs = (*self.subdirs, "noarch")
+
+        self._repodata_fn = self._maybe_ignore_current_repodata()
 
     def solve_final_state(
         self,
@@ -105,6 +151,8 @@ class RattlerSolver(LibMambaSolver):
 
         return solution
 
+    # region Solve
+
     def _solving_loop(
         self,
         in_state: SolverInputState,
@@ -152,6 +200,188 @@ class RattlerSolver(LibMambaSolver):
         return out_state
 
     def _solve_attempt(
+        self,
+        in_state: SolverInputState,
+        out_state: SolverOutputState,
+        index: RattlerIndexHelper,
+        attempt: int = 0,
+    ) -> RattlerSolverError | list[rattler.RepoDataRecord]:
+        """
+        The solver in rattler is declarative: you pass the things you want
+        and it returns either a solution or an exception with the conflicts.
+        There's no concept of 'remove'. Thus, we need to structure the requests
+        a bit differently than in classic or libmamba.
+
+        The solver API offers these categories:
+
+        - specs: MatchSpecs to _install_.
+        - constraints: Additional conditions (as MatchSpecs) to meet,
+          _if_ the package mentioned ends up in the install list.
+        - locked_packages: Preferred records (useful to minimize number of updates and respect
+          the installed packages, history or lockfiles).
+        - pinned_packages: Records that MUST be present if needed. It will not allow any other
+          variant.
+        - virtual_packages: Details of the system.
+        """
+        if os.environ.get("OLD_SOLVE"):
+            return self._solve_attempt_old(in_state, out_state, index, attempt)
+        solve_kwargs = self._collect_specs(in_state, out_state)
+        dumped = json.dumps(solve_kwargs, indent=2, default=str, sort_keys=True)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Solver input:\n%s", dumped)
+        with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
+            f.write(dumped + "\n----\n")
+        try:
+            solution = asyncio.run(
+                rattler.solve_with_sparse_repodata(
+                    **solve_kwargs,
+                    virtual_packages=self._rattler_virtual_packages(in_state),
+                    sparse_repodata=[info.repo for info in index._index.values()],
+                    channel_priority=(
+                        rattler.ChannelPriority.Strict
+                        if context.channel_priority == ChannelPriority.STRICT
+                        else rattler.ChannelPriority.Disabled
+                    ),
+                    strategy="highest",
+                )
+            )
+        except RattlerSolverError as exc:
+            self._maybe_raise_for_problems(str(exc), out_state)
+            return exc
+        else:
+            out_state.conflicts.clear()
+            return solution
+
+    def _collect_specs(
+        self,
+        in_state: SolverInputState,
+        out_state: SolverOutputState,
+    ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
+        specs: list[rattler.MatchSpec] = []
+        constraints: list[rattler.MatchSpec] = []
+        locked_packages: list[rattler.PackageRecord] = []
+        pinned_packages: list[rattler.PackageRecord] = []
+
+        # conda remove allows globbed names; make sure we don't install those!
+        remove = set()
+        if in_state.is_removing:
+            for requested_spec in in_state.requested.values():
+                if "*" in requested_spec.name:
+                    for installed_name, installed_record in in_state.installed.items():
+                        if requested_spec.match(installed_record):
+                            remove.add(installed_name)
+
+        # Protect history and aggressive updates from being uninstalled if possible. From libsolv
+        # docs: "The matching installed packages are considered to be installed by a user, thus not
+        # installed to fulfill some dependency. This is needed input for the calculation of
+        # unneeded packages for jobs that have the SOLVER_CLEANDEPS flag set."
+        user_installed = {
+            pkg
+            for pkg in (
+                *in_state.history,
+                *in_state.aggressive_updates,
+                *in_state.pinned,
+                *in_state.do_not_remove,
+            )
+            if pkg in in_state.installed
+            and pkg not in remove
+        }
+
+        # Fast-track python version changes (Part 1/2)
+        # ## When the Python version changes, this implies all packages depending on
+        # ## python will be reinstalled too. This can mean that we'll have to try for every
+        # ## installed package to result in a conflict before we get to actually solve everything
+        # ## A workaround is to let all non-noarch python-depending specs to "float" by marking
+        # ## them as a conflict preemptively
+        python_version_might_change = False
+        installed_python = in_state.installed.get("python")
+        to_be_installed_python = out_state.specs.get("python")
+        if installed_python and to_be_installed_python:
+            python_version_might_change = not to_be_installed_python.match(
+                installed_python
+            )
+
+        for name in out_state.specs:
+            if "*" in name:
+                continue
+            if name in remove:
+                constraints.append(rattler.MatchSpec(f"{name}<0.0.0dev0"))
+                continue
+
+            installed: PackageRecord = in_state.installed.get(name)
+            requested: MatchSpec = in_state.requested.get(name)
+            history: MatchSpec = in_state.history.get(name)
+            pinned: MatchSpec = in_state.pinned.get(name)
+            conflicting: MatchSpec = out_state.conflicts.get(name)
+
+            if name in user_installed and not in_state.prune and not conflicting and not requested and name not in in_state.always_update:
+                locked_packages.append(installed)
+
+            if pinned and not pinned.is_name_only_spec:
+                constraints.append(pinned)
+
+            if requested:
+                specs.append(requested)
+            elif name in in_state.always_update:
+                specs.append(name)
+            # These specs are "implicit"; the solver logic massages them for better UX
+            # as long as they don't cause trouble
+            elif in_state.prune:
+                continue
+            elif name == "python" and installed and not pinned:
+                pyver = ".".join(installed.version.split(".")[:2])
+                constraints.append(f"python {pyver}.*")
+            elif history:
+                if conflicting and history.strictness == 3:
+                    # relax name-version-build (strictness=3) history specs that cause conflicts
+                    # this is called neutering and makes test_neutering_of_historic_specs pass
+                    version = str(history.version or "")
+                    if version.startswith("=="):
+                        spec_str = f"{name} {version[2:]}"
+                    elif version.startswith(("!=", ">", "<")):
+                        spec_str = f"{name} {version}"
+                    elif version:
+                        spec_str = f"{name} {version}.*"
+                    else:
+                        spec_str = name
+                    specs.append(spec_str)
+                else:
+                    specs.append(history)
+            elif installed and not conflicting:
+                # we freeze everything else as installed
+                lock = in_state.update_modifier.FREEZE_INSTALLED
+                if pinned and pinned.is_name_only_spec:
+                    # name-only pins are treated as locks when installed
+                    lock = True
+                if python_version_might_change and installed.noarch is None:
+                    for dep in installed.depends:
+                        if MatchSpec(dep).name in ("python", "python_abi"):
+                            lock = False
+                            break
+                if lock:
+                    pinned_packages.append(installed)
+                # enabling this else branch makes
+                # conda/conda's tests/core/test_solve.py::test_freeze_deps_1[libmamba] fail
+                # else:
+                #     tasks[Request.Keep].append(name)
+        return {
+            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "constraints": [
+                self._match_spec_to_rattler_match_spec(spec) for spec in constraints
+            ],
+            "locked_packages": [
+                self._prefix_record_to_rattler_prefix_record(record)
+                for record in locked_packages
+            ],
+            "pinned_packages": [
+                self._prefix_record_to_rattler_prefix_record(record)
+                for record in pinned_packages
+            ],
+        }
+
+    # endregion
+
+    def _solve_attempt_old(
         self,
         in_state: SolverInputState,
         out_state: SolverOutputState,
@@ -231,12 +461,19 @@ class RattlerSolver(LibMambaSolver):
             record for record in locked_packages if record.name not in remove
         ]
 
-        # print("specs=", *[rattler.MatchSpec(s) for s in specs])
-        # print("locked_packages=", *locked_packages)
-        # print("pinned_packages=", *pinned_packages)
-        # print("virtual_packages=", *virtual_packages)
-        # print("constraints=", *[rattler.MatchSpec(s) for s in constrained_specs])
-        # print("index=", index._index)
+        # dumped = dict(
+        #     specs=[
+        #         rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
+        #     ],
+        #     locked_packages=locked_packages,
+        #     pinned_packages=pinned_packages,
+        #     constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
+        # )
+        # dumped = json.dumps(dumped, indent=2, default=str, sort_keys=True)
+        # if log.isEnabledFor(logging.DEBUG):
+        #     log.debug("Solver input:\n%s", dumped)
+        # with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
+        #     f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
@@ -263,6 +500,8 @@ class RattlerSolver(LibMambaSolver):
         else:
             out_state.conflicts.clear()
             return solution
+
+    # region Error reporting
 
     def _maybe_raise_for_problems(self, problems: str, out_state: SolverOutputState):
         unsatisfiable = {}
@@ -330,6 +569,9 @@ class RattlerSolver(LibMambaSolver):
             conda_record = rattler_record_to_conda_record(rattler_record)
             out_state.records[conda_record.name] = conda_record
 
+    # endregion
+    # region Converters & Checkers
+
     @cache
     def _prefix_record_to_rattler_prefix_record(self, record):
         # TODO: This is a hack to get the installed packages into the solver
@@ -340,3 +582,90 @@ class RattlerSolver(LibMambaSolver):
             return rattler.PrefixRecord.from_path(tmp.name)
         finally:
             Path(tmp.name).unlink()
+
+    def _rattler_virtual_packages(
+        self, in_state: SolverInputState
+    ) -> list[rattler.GenericVirtualPackage]:
+        return [
+            rattler.GenericVirtualPackage(
+                rattler.PackageName(pkg.name),
+                rattler.Version(pkg.version),
+                pkg.build,
+            )
+            for pkg in in_state.virtual.values()
+        ]
+
+    def _match_spec_to_rattler_match_spec(self, spec: MatchSpec) -> rattler.MatchSpec:
+        return rattler.MatchSpec(str(MatchSpec(spec)).rstrip("=").replace("=[", "["))
+
+    # region Helpers
+
+    def _maybe_ignore_current_repodata(self) -> str:
+        is_repodata_fn_set = False
+        for config in context.collect_all().values():
+            for key, value in config.items():
+                if key == "repodata_fns" and value:
+                    is_repodata_fn_set = True
+                    break
+        if self._repodata_fn == "current_repodata.json" and not is_repodata_fn_set:
+            log.debug(
+                "Ignoring repodata_fn='current_repodata.json', defaulting to %s",
+                REPODATA_FN,
+            )
+            return REPODATA_FN
+        return self._repodata_fn
+
+    def _max_attempts(self, in_state: SolverInputState, default: int = 1) -> int:
+        from_env_var = os.environ.get("CONDA_RATTLER_SOLVER_MAX_ATTEMPTS")
+        installed_count = len(in_state.installed)
+        if from_env_var:
+            try:
+                max_attempts_from_env = int(from_env_var)
+            except ValueError:
+                raise CondaValueError(
+                    f"CONDA_RATTLER_SOLVER_MAX_ATTEMPTS='{from_env_var}'. Must be int."
+                )
+            if max_attempts_from_env < 1:
+                raise CondaValueError(
+                    f"CONDA_RATTLER_SOLVER_MAX_ATTEMPTS='{max_attempts_from_env}'. Must be >=1."
+                )
+            elif max_attempts_from_env > installed_count:
+                log.warning(
+                    "CONDA_RATTLER_SOLVER_MAX_ATTEMPTS='%s' is higher than the number of "
+                    "installed packages (%s). Using that one instead.",
+                    max_attempts_from_env,
+                    installed_count,
+                )
+                return installed_count
+            else:
+                return max_attempts_from_env
+        elif in_state.update_modifier.FREEZE_INSTALLED and installed_count:
+            # this the default, but can be overriden with --update-specs
+            # we cap at MAX_SOLVER_ATTEMPTS_CAP attempts to avoid things
+            # getting too slow in large environments
+            return min(self.MAX_SOLVER_ATTEMPTS_CAP, installed_count)
+        else:
+            return default
+
+    def _collect_channel_list(self, in_state: SolverInputState) -> list[Channel]:
+        # Aggregate channels and subdirs
+        deduped_channels = {}
+        for channel in chain(
+            self.channels, in_state.channels_from_specs(), in_state.maybe_free_channel()
+        ):
+            if channel_platform := getattr(channel, "platform", None):
+                if channel_platform not in self.subdirs:
+                    log.info(
+                        "Channel %s defines platform %s which is not part of subdirs=%s. "
+                        "Ignoring platform attribute...",
+                        channel,
+                        channel_platform,
+                        self.subdirs,
+                    )
+                # Remove 'Channel.platform' to avoid missing subdirs. Channel.urls() will ignore
+                # our explicitly passed subdirs if .platform is defined!
+                channel = Channel(
+                    **{k: v for k, v in channel.dump().items() if k != "platform"}
+                )
+            deduped_channels[channel] = None
+        return list(deduped_channels)
