@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+from collections import defaultdict
 from functools import cache
 from itertools import chain
 from pathlib import Path
@@ -72,6 +73,7 @@ class RattlerSolver(LibMambaSolver):
         if specs_to_remove and command is NULL:
             command = "remove"
 
+        self._unmerged_specs_to_add = frozenset(MatchSpec(spec) for spec in specs_to_add)
         super().__init__(
             os.fspath(prefix),
             channels,
@@ -313,12 +315,19 @@ class RattlerSolver(LibMambaSolver):
                 installed_python
             )
 
+        # TODO: Make in_state.requested a dict[str, list[MatchSpec]]
+        # This makes tests/core/test_solve.py::test_globstr_matchspec_compatible
+        # and test_globstr_matchspec_non_compatible pass
+        requested_specs = defaultdict(list)
+        for spec in self._unmerged_specs_to_add:
+            requested_specs[spec.name].append(spec)
+
         for name in out_state.specs:
             if "*" in name:
                 continue
 
             installed: PackageRecord = in_state.installed.get(name)
-            requested: MatchSpec = in_state.requested.get(name)
+            requested: list[MatchSpec] = requested_specs.get(name)
             history: MatchSpec = in_state.history.get(name)
             pinned: MatchSpec = in_state.pinned.get(name)
             conflicting: MatchSpec = out_state.conflicts.get(name)
@@ -336,7 +345,7 @@ class RattlerSolver(LibMambaSolver):
                 constraints.append(pinned)
 
             if requested:
-                specs.append(requested)
+                specs.extend(requested)
             elif name in in_state.always_update and not conflicting:
                 specs.append(name)
             # These specs are "implicit"; the solver logic massages them for better UX
@@ -406,13 +415,14 @@ class RattlerSolver(LibMambaSolver):
 
         # conda remove allows globbed names; make sure we don't install those!
         remove = set()
-        for requested_spec in in_state.requested.values():
-            if "*" in requested_spec.name:
+        for requested_name, requested_specs in in_state.requested.items():
+            if "*" in requested_name:
                 for installed_name, installed_record in in_state.installed.items():
-                    if requested_spec.match(installed_record):
-                        remove.add(installed_name)
+                    for requested_spec in requested_specs:
+                        if requested_spec.match(installed_record):
+                            remove.add(installed_name)
             else:
-                remove.add(requested_spec.name)
+                remove.add(requested_name)
 
         for name in out_state.specs:
             if "*" in name:
