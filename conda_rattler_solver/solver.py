@@ -4,10 +4,8 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from collections import defaultdict
 from functools import cache
-from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
@@ -16,8 +14,7 @@ import rattler
 from conda.base.constants import REPODATA_FN, ChannelPriority
 from conda.base.context import context
 from conda.common.constants import NULL
-from conda.core.solve import Solver
-from conda.exceptions import CondaValueError, PackagesNotFoundError
+from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
 from conda_libmamba_solver.solver import LibMambaSolver
@@ -165,10 +162,11 @@ class RattlerSolver(LibMambaSolver):
     ) -> SolverOutputState:
         solution = None
         out_state.check_for_pin_conflicts(index)
-        for attempt in range(1, self._max_attempts(in_state) + 1):
+        max_attempts = min(len(in_state.installed) or 3, 3)
+        for attempt in range(1, max_attempts):
             log.debug("Starting solver attempt %s", attempt)
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt)
-            if solution is not None and not isinstance(solution, Exception):
+            if not isinstance(solution, Exception):  # Found a solution, stop trying
                 break
             out_state = SolverOutputState(
                 solver_input_state=in_state,
@@ -188,7 +186,7 @@ class RattlerSolver(LibMambaSolver):
                 }
             )
             solution = self._solve_attempt(
-                in_state, out_state, index, attempt=attempt + 1
+                in_state, out_state, index, attempt=attempt + 1000  # last attempt
             )
             if isinstance(solution, Exception) or solution is None:
                 exc = RattlerUnsatisfiableError(solution or "Could not find solution")
@@ -237,9 +235,11 @@ class RattlerSolver(LibMambaSolver):
             with open(
                 "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
             ) as f:
+                f.write(f"Attempt: {attempt}\n")
                 f.write(f"Removing: {in_state.is_removing}\n")
                 f.write(f"Installed: {in_state.installed.keys()}\n")
                 f.write(f"History: {in_state.history.keys()}\n")
+                f.write(f"Conflicts: {out_state.conflicts.keys()}\n")
                 f.write(f"Input: {dumped}\n")
         try:
             solution = asyncio.run(
@@ -686,4 +686,7 @@ class RattlerSolver(LibMambaSolver):
         ]
 
     def _match_spec_to_rattler_match_spec(self, spec: MatchSpec) -> rattler.MatchSpec:
-        return rattler.MatchSpec(str(MatchSpec(spec)).rstrip("=").replace("=[", "["))
+        match_spec = MatchSpec(spec)
+        if "/" in match_spec.name:
+            raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
+        return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
