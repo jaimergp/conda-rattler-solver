@@ -162,8 +162,12 @@ class RattlerSolver(LibMambaSolver):
     ) -> SolverOutputState:
         solution = None
         out_state.check_for_pin_conflicts(index)
-        max_attempts = min(len(in_state.installed) + 6, 6)
-        for attempt in range(1, max_attempts):
+        # Give some
+        if n_installed := len(in_state.installed):
+            max_attempts = min(n_installed, self.MAX_SOLVER_ATTEMPTS_CAP)
+        else:
+            max_attempts = 1
+        for attempt in range(1, max_attempts + 1):
             log.debug("Starting solver attempt %s", attempt)
             solution = self._solve_attempt(in_state, out_state, index, attempt=attempt)
             if not isinstance(solution, Exception):  # Found a solution, stop trying
