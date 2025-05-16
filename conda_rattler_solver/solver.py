@@ -73,7 +73,9 @@ class RattlerSolver(LibMambaSolver):
         if specs_to_remove and command is NULL:
             command = "remove"
 
-        self._unmerged_specs_to_add = frozenset(MatchSpec(spec) for spec in specs_to_add)
+        self._unmerged_specs_to_add = frozenset(
+            MatchSpec(spec) for spec in specs_to_add
+        )
         super().__init__(
             os.fspath(prefix),
             channels,
