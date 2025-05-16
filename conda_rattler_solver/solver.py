@@ -415,12 +415,11 @@ class RattlerSolver(LibMambaSolver):
 
         # conda remove allows globbed names; make sure we don't install those!
         remove = set()
-        for requested_name, requested_specs in in_state.requested.items():
+        for requested_name, requested_spec in in_state.requested.items():
             if "*" in requested_name:
                 for installed_name, installed_record in in_state.installed.items():
-                    for requested_spec in requested_specs:
-                        if requested_spec.match(installed_record):
-                            remove.add(installed_name)
+                    if requested_spec.match(installed_record):
+                        remove.add(installed_name)
             else:
                 remove.add(requested_name)
 
