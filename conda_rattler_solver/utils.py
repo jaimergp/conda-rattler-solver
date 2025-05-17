@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rattler
+from conda.base.constants import KNOWN_SUBDIRS
 from conda.models.records import PackageRecord
 
 if TYPE_CHECKING:
@@ -34,12 +35,17 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
     else:
         raise ValueError(f"Unknown noarch type: {record.noarch}")
 
+    if record.channel.endswith(("noarch", *KNOWN_SUBDIRS,)):
+        channel_url = record.channel
+    else:
+        channel_url = f"{record.channel}/{record.subdir}",
+
     return PackageRecord(
         name=record.name.source,
         version=str(record.version),
         build=record.build,
         build_number=record.build_number,
-        channel=f"{record.channel}/{record.subdir}",
+        channel=channel_url,
         subdir=record.subdir,
         fn=record.file_name,
         md5=_hash_to_str(record.md5),
