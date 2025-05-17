@@ -75,6 +75,9 @@ pre-commit = 'pre-commit'
 
 [tool.pixi.feature.test.dependencies]
 anaconda-client = "*"
+conda-build = "*"
+conda-index = "*"
+conda-lock = "*"
 coverage = "*"
 flask = ">=2.2"  # jlap pytest fixture
 git = "*"
@@ -130,6 +133,10 @@ addopts = [
   "--strict-markers",
   "--tb=native",
   "-vv",
+]
+markers = [
+  "integration: integration tests that usually require an internet connect",
+  "slow: slow running tests",
 ]
 
 [tool.ruff]

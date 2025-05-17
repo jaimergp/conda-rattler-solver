@@ -1,1 +1,8 @@
+conda-build
+conda-forge::pytest-xprocess
+conda-index
+conda-lock
+conda-forge::pre-commit
+# needed for many conda tests
+flask
 pytest
