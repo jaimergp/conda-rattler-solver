@@ -581,7 +581,9 @@ class RattlerSolver(LibMambaSolver):
         unsatisfiable = {}
         not_found = {}
         for line in problems.splitlines():
-            line = line.strip("─│└├").strip()
+            for char in "─│└├":
+                line = line.replace(char, "")
+            line = line.strip()
             if line.startswith("Cannot solve the request because of:"):
                 line = line.split(":", 1)[1]
             words = line.split()
