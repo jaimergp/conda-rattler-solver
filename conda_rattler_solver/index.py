@@ -63,6 +63,25 @@ class RattlerIndexHelper:
     def channels(self):
         return [Channel(c) for c in self._channels]
 
+    def n_packages(
+        self,
+        repos: Iterable[_ChannelRepoInfo] | None = None,
+        filter_: callable | None = None,
+    ) -> int:
+        repos = repos or list(self._index.values())
+        count = 0
+        for info in repos:
+            if filter_:
+                for name in info.repo.package_names():
+                    for record in info.repo.load_records(rattler.PackageName(name)):
+                        if filter_(record):
+                            count +=1
+            else:
+                for name in info.repo.package_names():
+                    for record in info.repo.load_records(rattler.PackageName(name)):
+                            count +=1
+        return count
+
     def get_info(self, key: str) -> _ChannelRepoInfo:
         orig_key = key
         if not key.startswith("file://"):
