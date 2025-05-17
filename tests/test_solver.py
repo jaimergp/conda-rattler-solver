@@ -60,6 +60,7 @@ class TestRattlerSolver(SolverTests):
             ],
         }
 
+
 def test_python_downgrade_reinstalls_noarch_packages(
     tmp_env: TmpEnvFixture,
     conda_cli: CondaCLIFixture,

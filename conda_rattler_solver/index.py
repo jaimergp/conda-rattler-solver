@@ -75,11 +75,11 @@ class RattlerIndexHelper:
                 for name in info.repo.package_names():
                     for record in info.repo.load_records(rattler.PackageName(name)):
                         if filter_(record):
-                            count +=1
+                            count += 1
             else:
                 for name in info.repo.package_names():
                     for record in info.repo.load_records(rattler.PackageName(name)):
-                            count +=1
+                        count += 1
         return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:

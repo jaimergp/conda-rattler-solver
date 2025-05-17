@@ -35,10 +35,15 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
     else:
         raise ValueError(f"Unknown noarch type: {record.noarch}")
 
-    if record.channel.endswith(("noarch", *KNOWN_SUBDIRS,)):
+    if record.channel.endswith(
+        (
+            "noarch",
+            *KNOWN_SUBDIRS,
+        )
+    ):
         channel_url = record.channel
     else:
-        channel_url = f"{record.channel}/{record.subdir}",
+        channel_url = (f"{record.channel}/{record.subdir}",)
 
     return PackageRecord(
         name=record.name.source,

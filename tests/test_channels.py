@@ -15,13 +15,10 @@ from urllib.request import urlretrieve
 import pytest
 from conda.base.context import reset_context
 from conda.common.compat import on_linux, on_win
-from conda.common.io import env_vars
 from conda.core.prefix_data import PrefixData
 from conda.exceptions import DryRunExit
 from conda.models.channel import Channel
 from conda.testing.integration import package_is_installed
-
-from conda_rattler_solver.index import RattlerIndexHelper
 
 from .channel_testing.helpers import (
     http_server_auth_basic,  # noqa: F401
@@ -57,7 +54,6 @@ def test_channel_matchspec(conda_cli: CondaCLIFixture, path_factory: PathFactory
             # Rattler difference:
             # assert record["channel"] == "pkgs/main"
             assert record["channel"] == "conda-forge"
-
 
 
 def test_channels_installed_unavailable(
@@ -358,4 +354,3 @@ def test_use_cache_works_offline_fresh_install_keep(tmp_path):
     conda_subprocess(*args, "--offline", **kwargs)
     conda_subprocess(*args, "--use-index-cache", **kwargs)
     conda_subprocess(*args, "--offline", "--use-index-cache", **kwargs)
-
