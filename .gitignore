@@ -155,6 +155,12 @@ cython_debug/
 # rever
 rever/
 
+# pytest
+test-report.xml
+
+# default pytest duration files
+.test_durations
+
 # setuptools_scm
 _version.py
 
