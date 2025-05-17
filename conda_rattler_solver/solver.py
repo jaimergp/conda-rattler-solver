@@ -581,7 +581,7 @@ class RattlerSolver(LibMambaSolver):
         unsatisfiable = {}
         not_found = {}
         for line in problems.splitlines():
-            line = line.strip(" ─│└├")
+            line = line.strip("─│└├").strip()
             if line.startswith("Cannot solve the request because of:"):
                 line = line.split(":", 1)[1]
             words = line.split()
@@ -602,7 +602,7 @@ class RattlerSolver(LibMambaSolver):
             elif "No candidates were found for" in line:
                 position = line.index("No candidates were found for ")
                 position += len("No candidates were found for ")
-                spec = line[position:]
+                spec = line[position:].rstrip(".")
                 not_found[spec.split()[0]] = MatchSpec(spec)
         if not unsatisfiable and not_found:
             log.debug(
