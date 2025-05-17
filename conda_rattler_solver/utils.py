@@ -39,7 +39,7 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         version=str(record.version),
         build=record.build,
         build_number=record.build_number,
-        channel=record.channel,
+        channel=f"{record.channel}/{record.subdir}",
         subdir=record.subdir,
         fn=record.file_name,
         md5=_hash_to_str(record.md5),
