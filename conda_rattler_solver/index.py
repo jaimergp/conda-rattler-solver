@@ -133,15 +133,10 @@ class RattlerIndexHelper:
         Executor = (
             DummyExecutor
             if context.debug or context.repodata_threads == 1
-            else partial(
-                ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads
-            )
+            else partial(ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads)
         )
         with Executor() as executor:
-            jsons = {
-                url: str(path)
-                for (url, path) in executor.map(self._fetch_channel, urls)
-            }
+            jsons = {url: str(path) for (url, path) in executor.map(self._fetch_channel, urls)}
 
         # 3. Create repos in same order as `urls`
         index = {}

@@ -70,9 +70,7 @@ class RattlerSolver(LibMambaSolver):
         if specs_to_remove and command is NULL:
             command = "remove"
 
-        self._unmerged_specs_to_add = frozenset(
-            MatchSpec(spec) for spec in specs_to_add
-        )
+        self._unmerged_specs_to_add = frozenset(MatchSpec(spec) for spec in specs_to_add)
         super().__init__(
             os.fspath(prefix),
             channels,
@@ -129,9 +127,7 @@ class RattlerSolver(LibMambaSolver):
         ]
 
         channels = self._collect_channel_list(in_state)
-        conda_build_channels = self._collect_channels_subdirs_from_conda_build(
-            seen=set(channels)
-        )
+        conda_build_channels = self._collect_channels_subdirs_from_conda_build(seen=set(channels))
         with get_spinner(
             self._collect_all_metadata_spinner_message(channels, conda_build_channels),
         ):
@@ -190,7 +186,10 @@ class RattlerSolver(LibMambaSolver):
                 }
             )
             solution = self._solve_attempt(
-                in_state, out_state, index, attempt=attempt + 1000  # last attempt
+                in_state,
+                out_state,
+                index,
+                attempt=attempt + 1000,  # last attempt
             )
             if isinstance(solution, Exception) or solution is None:
                 exc = RattlerUnsatisfiableError(solution or "Could not find solution")
@@ -236,9 +235,7 @@ class RattlerSolver(LibMambaSolver):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
         if not os.environ.get("CI"):
-            with open(
-                "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
-            ) as f:
+            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
                 f.write(f"Attempt: {attempt}\n")
                 f.write(f"Removing: {in_state.is_removing}\n")
                 f.write(f"Installed: {in_state.installed.keys()}\n")
@@ -261,21 +258,15 @@ class RattlerSolver(LibMambaSolver):
             )
         except RattlerSolverError as exc:
             if not os.environ.get("CI"):
-                with open(
-                    "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
-                ) as f:
+                with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
                     f.write(f"Exception: {exc}\n-------\n")
             self._maybe_raise_for_problems(str(exc), out_state)
             return exc
         else:
             out_state.conflicts.clear()
             if not os.environ.get("CI"):
-                with open(
-                    "/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a"
-                ) as f:
-                    records = "\n- ".join(
-                        [str(x.channel) + "::" + str(x) for x in solution]
-                    )
+                with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
+                    records = "\n- ".join([str(x.channel) + "::" + str(x) for x in solution])
                     f.write(f"Solution:\n- {records}\n-------\n")
             return solution
 
@@ -317,9 +308,7 @@ class RattlerSolver(LibMambaSolver):
         installed_python = in_state.installed.get("python")
         to_be_installed_python = out_state.specs.get("python")
         if installed_python and to_be_installed_python:
-            python_version_might_change = not to_be_installed_python.match(
-                installed_python
-            )
+            python_version_might_change = not to_be_installed_python.match(installed_python)
 
         # TODO: Make in_state.requested a dict[str, list[MatchSpec]]
         # This makes tests/core/test_solve.py::test_globstr_matchspec_compatible
@@ -396,16 +385,12 @@ class RattlerSolver(LibMambaSolver):
                         locked_packages.append(installed)
         return {
             "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
-            "constraints": [
-                self._match_spec_to_rattler_match_spec(spec) for spec in constraints
-            ],
+            "constraints": [self._match_spec_to_rattler_match_spec(spec) for spec in constraints],
             "locked_packages": [
-                self._prefix_record_to_rattler_prefix_record(record)
-                for record in locked_packages
+                self._prefix_record_to_rattler_prefix_record(record) for record in locked_packages
             ],
             "pinned_packages": [
-                self._prefix_record_to_rattler_prefix_record(record)
-                for record in pinned_packages
+                self._prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
             ],
         }
 
@@ -450,22 +435,20 @@ class RattlerSolver(LibMambaSolver):
                 if name in in_state.aggressive_updates:
                     specs.append(name)
                 elif not conflicting:
-                    if history:  # TODO: Do this even if not installed (e.g. force removed previously?)
+                    if (
+                        history
+                    ):  # TODO: Do this even if not installed (e.g. force removed previously?)
                         specs.append(history)
                     locked_packages.append(installed)
 
         return {
             "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
-            "constraints": [
-                self._match_spec_to_rattler_match_spec(spec) for spec in constraints
-            ],
+            "constraints": [self._match_spec_to_rattler_match_spec(spec) for spec in constraints],
             "locked_packages": [
-                self._prefix_record_to_rattler_prefix_record(record)
-                for record in locked_packages
+                self._prefix_record_to_rattler_prefix_record(record) for record in locked_packages
             ],
             "pinned_packages": [
-                self._prefix_record_to_rattler_prefix_record(record)
-                for record in pinned_packages
+                self._prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
             ],
         }
 
@@ -501,8 +484,7 @@ class RattlerSolver(LibMambaSolver):
             MatchSpec(spec).name
             for request, task_specs in jobs.items()
             for spec in task_specs
-            if request in (Request.Remove, Request.Update)
-            and "*" not in MatchSpec(spec).name
+            if request in (Request.Remove, Request.Update) and "*" not in MatchSpec(spec).name
         ]
 
         specs = []
@@ -547,14 +529,10 @@ class RattlerSolver(LibMambaSolver):
                                 self._prefix_record_to_rattler_prefix_record(record)
                             )
         # remove any packages that should be updated from the locked_packages
-        locked_packages = [
-            record for record in locked_packages if record.name not in remove
-        ]
+        locked_packages = [record for record in locked_packages if record.name not in remove]
 
         dumped = dict(
-            specs=[
-                rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
-            ],
+            specs=[rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs],
             locked_packages=locked_packages,
             pinned_packages=pinned_packages,
             constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
@@ -563,17 +541,14 @@ class RattlerSolver(LibMambaSolver):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Solver input:\n%s", dumped)
         if not os.environ.get("CI"):
-            with open(
-                "/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a"
-            ) as f:
+            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
                 f.write(str(in_state.installed.keys()))
                 f.write(dumped + "\n----\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
                     specs=[
-                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "["))
-                        for s in specs
+                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
                     ],
                     sparse_repodata=[info.repo for info in index._index.values()],
                     locked_packages=locked_packages,
@@ -607,9 +582,7 @@ class RattlerSolver(LibMambaSolver):
             words = line.split()
             if "is locked, but another version is required as reported above" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")
-            elif (
-                "which cannot be installed because there are no viable options" in line
-            ):
+            elif "which cannot be installed because there are no viable options" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1].strip(',')}")
             elif "cannot be installed because there are no viable options" in line:
                 unsatisfiable[words[0]] = MatchSpec(f"{words[0]} {words[1]}")

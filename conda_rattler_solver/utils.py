@@ -101,8 +101,7 @@ def conda_prefix_record_to_rattler_prefix_record(
             "path_type": rattler.PrefixPathType(str(path.path_type)),
             "prefix_placeholder": getattr(path, "prefix_placeholder", None),
             "sha256": bytes.fromhex(getattr(path, "sha256", "")) or None,
-            "sha256_in_prefix": bytes.fromhex(getattr(path, "sha256_in_prefix", ""))
-            or None,
+            "sha256_in_prefix": bytes.fromhex(getattr(path, "sha256_in_prefix", "")) or None,
             "size_in_bytes": getattr(path, "size_in_bytes", None),
         }
         if file_mode := str(getattr(path, "file_mode", "")):
