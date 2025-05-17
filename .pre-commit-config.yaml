@@ -1,12 +1,6 @@
 # disable autofixing PRs, commenting "pre-commit.ci autofix" on a pull request triggers a autofix
 ci:
   autofix_prs: false
-# generally speaking we ignore all vendored code as well as tests data
-# TODO: Restore index and solver exclude lines before merge
-exclude: |
-  (?x)^(
-    tests/data/.*
-  )$
 repos:
   # generic verification and formatting
   - repo: https://github.com/pre-commit/pre-commit-hooks

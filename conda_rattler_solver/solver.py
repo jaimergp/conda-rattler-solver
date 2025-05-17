@@ -131,7 +131,12 @@ class RattlerSolver(LibMambaSolver):
         with get_spinner(
             self._collect_all_metadata_spinner_message(channels, conda_build_channels),
         ):
-            index = RattlerIndexHelper(all_channels, self.subdirs, self._repodata_fn)
+            index = RattlerIndexHelper(
+                all_channels,
+                self.subdirs,
+                self._repodata_fn,
+                pkgs_dirs=context.pkgs_dirs if context.offline else (),
+            )
 
         with get_spinner(
             self._solving_loop_spinner_message(),

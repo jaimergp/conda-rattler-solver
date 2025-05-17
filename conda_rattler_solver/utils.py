@@ -6,6 +6,8 @@ import rattler
 from conda.models.records import PackageRecord
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from conda.models.records import PrefixRecord
 
 
@@ -117,3 +119,14 @@ def conda_prefix_record_to_rattler_prefix_record(
         requested_spec=record.get("requested_spec"),
         files=record.files,
     )
+
+
+def empty_repodata_dict(subdir: str, **info_kwargs) -> dict[str, Any]:
+    return {
+        "info": {
+            "subdir": subdir,
+            **info_kwargs,
+        },
+        "packages": {},
+        "packages.conda": {},
+    }

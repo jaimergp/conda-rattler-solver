@@ -1,26 +1,31 @@
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
 
 import rattler
 from conda.base.constants import REPODATA_FN
 from conda.base.context import context
 from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
-from conda.common.url import percent_decode, remove_auth, split_anaconda_token
+from conda.common.serialize import json_dump
+from conda.common.url import path_to_url, percent_decode, remove_auth, split_anaconda_token
+from conda.core.package_cache_data import PackageCacheData
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
 
-from .utils import rattler_record_to_conda_record
+from .utils import empty_repodata_dict, rattler_record_to_conda_record
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from conda.models.records import PackageRecord
+    from conda.common.path import PathsType
+    from conda.models.records import PackageCacheRecord, PackageRecord
 
 log = logging.getLogger(f"conda.{__name__}")
 
@@ -29,11 +34,11 @@ log = logging.getLogger(f"conda.{__name__}")
 class _ChannelRepoInfo:
     "A dataclass mapping conda Channels, libmamba Repos and URLs"
 
-    channel: Channel
+    channel: Channel | None
     repo: rattler.SparseRepoData
     full_url: str
     noauth_url: str
-    local_json: str
+    local_json: str | None
 
 
 class RattlerIndexHelper:
@@ -42,12 +47,17 @@ class RattlerIndexHelper:
         channels: Iterable[Channel | str] = None,
         subdirs: Iterable[str] = None,
         repodata_fn: str = REPODATA_FN,
+        pkgs_dirs: PathsType = (),
     ):
         self._channels = context.channels if channels is None else channels
         self._subdirs = context.subdirs if subdirs is None else subdirs
         self._repodata_fn = repodata_fn
 
         self._index = self._load_channels()
+        if pkgs_dirs:
+            self._index.update(
+                {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
+            )
 
     @property
     def channels(self):
@@ -145,6 +155,59 @@ class RattlerIndexHelper:
             index[info.noauth_url] = info
 
         return index
+
+    def _load_pkgs_cache(self, pkgs_dirs: PathsType) -> list[_ChannelRepoInfo]:
+        repos = []
+        subdir = next(s for s in self._subdirs if s != "noarch")
+        for path in pkgs_dirs:
+            path_as_url = path_to_url(path)
+            package_cache_data = PackageCacheData(path)
+            package_cache_data.load()
+            arch = empty_repodata_dict(subdir, base_url=path_as_url)
+            noarch = empty_repodata_dict("noarch", base_url=path_as_url)
+            for record in package_cache_data.values():
+                record: PackageCacheRecord
+                if record.subdir not in self._subdirs:
+                    continue
+                record_data = dict(record.dump())
+                for field in (
+                    "sha256",
+                    "track_features",
+                    "license",
+                    "size",
+                    "url",
+                    "noarch",
+                    "platform",
+                    "timestamp",
+                ):
+                    if field in record_data:
+                        continue  # do not overwrite
+                    value = getattr(record, field, None)
+                    if value is not None:
+                        record_data[field] = value
+                key = "packages" if record.fn.endswith(".tar.bz2") else "packages.conda"
+                if record.noarch:
+                    noarch[key][record.fn] = record_data
+                else:
+                    arch[key][record.fn] = record_data
+            for subdir_name, repodata in (("noarch", noarch), (subdir, arch)):
+                with NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
+                    f.write(json_dump(repodata))
+                repos.append(
+                    _ChannelRepoInfo(
+                        repo=rattler.SparseRepoData(
+                            rattler.Channel(path_as_url),
+                            subdir_name,
+                            f.name,
+                        ),
+                        channel=Channel(path_as_url),
+                        full_url=path_as_url,
+                        noauth_url=path_as_url,
+                        local_json=f.name,
+                    )
+                )
+                atexit.register(os.unlink, f.name)
+        return repos
 
     def search(self, spec: str) -> list[PackageRecord]:
         # This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
