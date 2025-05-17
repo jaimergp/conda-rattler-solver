@@ -23,6 +23,7 @@ from conda.exceptions import (
     UnsatisfiableError,
 )
 from conda.testing.integration import package_is_installed
+from conda.testing.solver_helpers import SolverTests
 
 from conda_rattler_solver.exceptions import RattlerUnsatisfiableError
 from conda_rattler_solver.solver import RattlerSolver as Solver
@@ -33,6 +34,31 @@ if TYPE_CHECKING:
     from conda.testing.fixtures import CondaCLIFixture, TmpEnvFixture
     from pytest import MonkeyPatch
 
+
+class TestRattlerSolver(SolverTests):
+    @property
+    def solver_class(self) -> type[Solver]:
+        return Solver
+
+    @property
+    def tests_to_skip(self):
+        return {
+            "conda-libmamba-solver does not support features": [
+                "test_iopro_mkl",
+                "test_iopro_nomkl",
+                "test_mkl",
+                "test_accelerate",
+                "test_scipy_mkl",
+                "test_pseudo_boolean",
+                "test_no_features",
+                "test_surplus_features_1",
+                "test_surplus_features_2",
+                "test_remove",
+                # this one below only fails reliably on windows;
+                # it passes Linux on CI, but not locally?
+                "test_unintentional_feature_downgrade",
+            ],
+        }
 
 def test_python_downgrade_reinstalls_noarch_packages(
     tmp_env: TmpEnvFixture,
