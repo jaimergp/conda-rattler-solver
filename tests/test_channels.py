@@ -223,6 +223,11 @@ def test_http_server_auth_token(
     )
 
 
+@pytest.mark.xfail(
+    reason="multichannels not fully implemented yet: "
+    "https://github.com/conda/rattler/issues/1327",
+    strict=True,
+)
 def test_http_server_auth_token_in_defaults(
     http_server_auth_token,  # noqa: F811
     path_factory: PathFactoryFixture,
@@ -251,6 +256,11 @@ def test_http_server_auth_token_in_defaults(
             condarc.unlink()
 
 
+@pytest.mark.xfail(
+    reason="multichannels not fully implemented yet: "
+    "https://github.com/conda/rattler/issues/1327",
+    strict=True,
+)
 def test_local_spec() -> None:
     """https://github.com/conda/conda-libmamba-solver/issues/398"""
     env = os.environ.copy()

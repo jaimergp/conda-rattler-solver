@@ -100,6 +100,11 @@ def test_python_downgrade_reinstalls_noarch_packages(
         check_call([pip, "--version"])
 
 
+@pytest.mark.xfail(
+    reason="multichannels not fully implemented yet: "
+    "https://github.com/conda/rattler/issues/1327",
+    strict=True,
+)
 def test_defaults_specs_work(conda_cli: CondaCLIFixture) -> None:
     """
     See https://github.com/conda/conda-libmamba-solver/issues/173
