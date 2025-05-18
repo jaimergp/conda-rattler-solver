@@ -7,7 +7,7 @@ name = "conda-rattler-solver"
 version = "0.0.1"
 description = "The fast pixi solver, now in conda"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = { file = "LICENSE" }
 classifiers = [
   "License :: OSI Approved :: BSD License",
   "Programming Language :: Python :: 3",
@@ -18,13 +18,13 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy"
+  "Programming Language :: Python :: Implementation :: PyPy",
 ]
 requires-python = ">=3.8"
 dependencies = [
   "conda >=25.3.0",
   "conda-libmamba-solver >=25.3.0",
-  "py-rattler >=0.12.0"
+  "py-rattler >=0.12.0",
 ]
 
 [project.urls]
@@ -46,7 +46,7 @@ platforms = ["linux-64", "osx-arm64", "osx-64"] #, "win-64"]
 "py-rattler" = ">=0.12.0"
 
 [tool.pixi.pypi-dependencies]
-conda-rattler-solver = { path  = ".", editable = true }
+conda-rattler-solver = { path = ".", editable = true }
 
 [tool.pixi.feature.build]
 dependencies = { conda-build = "*" }
@@ -70,8 +70,14 @@ sphinx-sitemap = "*"
 sphinxcontrib-programoutput = "*"
 
 [tool.pixi.feature.test.tasks]
-test = { cmd = "python -m pytest", env = { CONDA_TEST_SOLVERS = "rattler" } }
 pre-commit = 'pre-commit'
+
+[tool.pixi.feature.test.tasks.test]
+cmd = "python -m pytest"
+[tool.pixi.feature.test.tasks.test.env]
+CONDA_TEST_SOLVERS = "rattler"
+CONDA_TEST_DATA_DIR = "$PIXI_PROJECT_ROOT/../conda/tests/data"
+
 
 [tool.pixi.feature.test.dependencies]
 anaconda-client = "*"
@@ -79,9 +85,9 @@ conda-build = "*"
 conda-index = "*"
 conda-lock = "*"
 coverage = "*"
-flask = ">=2.2"  # jlap pytest fixture
+flask = ">=2.2"                # jlap pytest fixture
 git = "*"
-importlib_resources = ">=5.10"  # only necessary for Python < 3.12
+importlib_resources = ">=5.10" # only necessary for Python < 3.12
 pexpect = "*"
 pip = "*"
 pytest = "*"
@@ -92,8 +98,8 @@ pytest-split = "*"
 pytest-timeout = "*"
 pytest-xprocess = "*"
 responses = "*"
-tomli = "*"  # for coverage pyproject.toml, only necessary for Python <= 3.11.0a6
-werkzeug = ">=2.2"  # jlap pytest fixture
+tomli = "*"                    # for coverage pyproject.toml, only necessary for Python <= 3.11.0a6
+werkzeug = ">=2.2"             # jlap pytest fixture
 
 [tool.pixi.feature.py39.dependencies]
 python = "3.9.*"
@@ -129,7 +135,7 @@ sort = "Miss"
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
-  "--durations=16",  # show 16 slowest tests
+  "--durations=16",   # show 16 slowest tests
   "--strict-markers",
   "--tb=native",
   "-vv",
@@ -144,18 +150,18 @@ target-version = "py39"
 line-length = 99
 
 [tool.ruff.lint]
-flake8-type-checking = {exempt-modules = [], strict = true}
+flake8-type-checking = { exempt-modules = [], strict = true }
 # see https://docs.astral.sh/ruff/rules/
 select = [
   # "D1",  # pydocstyle
-  "E",  # pycodestyle errors
-  "F",  # pyflakes
-  "FA",  # flake8-future-annotations
-  "I",  # isort
-  "ISC",  # flake8-implicit-str-concat
-  "RUF100",  # Unused noqa directive
-  "T10",  # flake8-debugger
-  "TCH",  # flake8-type-checking
-  "UP",  # pyupgrade
-  "W",  # pycodestyle warnings
+  "E",      # pycodestyle errors
+  "F",      # pyflakes
+  "FA",     # flake8-future-annotations
+  "I",      # isort
+  "ISC",    # flake8-implicit-str-concat
+  "RUF100", # Unused noqa directive
+  "T10",    # flake8-debugger
+  "TCH",    # flake8-type-checking
+  "UP",     # pyupgrade
+  "W",      # pycodestyle warnings
 ]
