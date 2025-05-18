@@ -649,7 +649,9 @@ class RattlerSolver(Solver):
         # TODO: This is a hack to get the installed packages into the solver
         # but rattler doesn't allow PrefixRecords to be built through the API yet
         with NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
-            json.dump(record.dump(), tmp)
+            data = record.dump()
+            data.setdefault("url", "https://this.package/does-not-have-a-url")
+            json.dump(data, tmp)
         try:
             return rattler.PrefixRecord.from_path(tmp.name)
         finally:
