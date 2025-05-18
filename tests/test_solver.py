@@ -668,6 +668,10 @@ def test_pytorch_gpu(specs, tmp_path):
     assert not p.returncode
     print(p.stdout)
 
+    p = conda_subprocess("clean --all", env=env)
+    assert not p.returncode
+    print(p.stdout)
+
     p = conda_subprocess(
         "create",
         "--dry-run",
