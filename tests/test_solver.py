@@ -640,12 +640,12 @@ def test_satisfied_skip_solve_matchspec(
 @pytest.mark.parametrize(
     "specs",
     (
-        pytest.param(("pytorch", "torchvision>0.12"), id="pytorch"),
-        pytest.param(("pytorch>0", "torchvision>0.12"), id="pytorch>0"),
-        pytest.param(("pytorch=2", "torchvision>0.12"), id="pytorch=2"),
+        pytest.param(("pytorch", "torchvision"), id="pytorch"),
+        pytest.param(("pytorch>0", "torchvision"), id="pytorch>0"),
+        pytest.param(("pytorch=2", "torchvision"), id="pytorch=2"),
     ),
 )
-def test_pytorch_gpu(specs):
+def test_pytorch_gpu(specs, tmp_path):
     """
     https://github.com/conda/conda-libmamba-solver/issues/646
 
@@ -658,6 +658,16 @@ def test_pytorch_gpu(specs):
     env["CONDA_OVERRIDE_GLIBC"] = "2.30"
     env["CONDA_OVERRIDE_LINUX"] = "5.15.167.4"
     env["CONDA_OVERRIDE_ARCHSPEC"] = "skylake"
+    env["CONDA_OVERRIDE_OSX"] = ""
+    env["CONDA_PKGS_DIRS"] = str(tmp_path)
+    p = conda_subprocess("config", "--show-sources", env=env)
+    assert not p.returncode
+    print(p.stdout)
+
+    p = conda_subprocess("info", env=env)
+    assert not p.returncode
+    print(p.stdout)
+
     p = conda_subprocess(
         "create",
         "--dry-run",
