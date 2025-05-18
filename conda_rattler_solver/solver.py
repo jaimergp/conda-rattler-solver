@@ -4,8 +4,11 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from collections import defaultdict
 from functools import cache
+from inspect import stack
+from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
@@ -14,22 +17,28 @@ import rattler
 from conda.base.constants import REPODATA_FN, ChannelPriority
 from conda.base.context import context
 from conda.common.constants import NULL
+from conda.common.io import time_recorder
+from conda.core.solve import Solver
 from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
+from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
-from conda_libmamba_solver.solver import LibMambaSolver
 from conda_libmamba_solver.state import SolverInputState, SolverOutputState
-from libmambapy.solver import Request
 from rattler import __version__ as rattler_version
 from rattler.exceptions import SolverError as RattlerSolverError
 
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
-from .utils import rattler_record_to_conda_record
+from .utils import (
+    fix_version_field_for_conda_build,
+    maybe_ignore_current_repodata,
+    notify_conda_outdated,
+    rattler_record_to_conda_record,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from boltons.setutils import IndexedSet
     from conda.auxlib import _Null
@@ -38,13 +47,12 @@ if TYPE_CHECKING:
         UpdateModifier,
     )
     from conda.common.path import PathType
-    from conda.models.channel import Channel
     from conda.models.records import PackageRecord
 
 log = logging.getLogger(f"conda.{__name__}")
 
 
-class RattlerSolver(LibMambaSolver):
+class RattlerSolver(Solver):
     @staticmethod
     @cache
     def user_agent() -> str:
@@ -90,7 +98,7 @@ class RattlerSolver(LibMambaSolver):
             # Fix: just add noarch to subdirs because it should always be there anyway.
             self.subdirs = (*self.subdirs, "noarch")
 
-        self._repodata_fn = self._maybe_ignore_current_repodata()
+        self._repodata_fn = maybe_ignore_current_repodata(self._repodata_fn)
 
     def solve_final_state(
         self,
@@ -120,23 +128,17 @@ class RattlerSolver(LibMambaSolver):
         if none_or_final_state is not None:
             return none_or_final_state
 
-        all_channels = [
-            *self.channels,
-            *in_state.channels_from_specs(),
-            *in_state.maybe_free_channel(),
-        ]
-
         channels = self._collect_channel_list(in_state)
         conda_build_channels = self._collect_channels_subdirs_from_conda_build(seen=set(channels))
         with get_spinner(
             self._collect_all_metadata_spinner_message(channels, conda_build_channels),
         ):
-            index = RattlerIndexHelper(
-                all_channels,
-                self.subdirs,
-                self._repodata_fn,
-                pkgs_dirs=context.pkgs_dirs if context.offline else (),
+            index = self._collect_all_metadata(
+                channels=channels,
+                conda_build_channels=conda_build_channels,
+                subdirs=self.subdirs,
             )
+            out_state.check_for_pin_conflicts(index)
 
         with get_spinner(
             self._solving_loop_spinner_message(),
@@ -149,11 +151,108 @@ class RattlerSolver(LibMambaSolver):
 
         # Check whether conda can be updated; this is normally done in .solve_for_diff()
         # but we are doing it now so we can reuse in_state and friends
-        self._notify_conda_outdated(None, index, solution)
+        self._notify_conda_outdated(None, self.prefix, index, solution)
 
         return solution
 
+    # region Metadata collection
+
+    def _collect_all_metadata_spinner_message(
+        self,
+        channels: Iterable[Channel],
+        conda_build_channels: Iterable[Channel | str] = (),
+    ) -> str:
+        if self._called_from_conda_build():
+            msg = "Reloading output folder"
+            if conda_build_channels:
+                names = list(
+                    dict.fromkeys([Channel(c).canonical_name for c in conda_build_channels])
+                )
+                msg += f" ({', '.join(names)})"
+            return msg
+
+        canonical_names = list(dict.fromkeys([c.canonical_name for c in channels]))
+        canonical_names_dashed = "\n - ".join(canonical_names)
+        return (
+            f"Channels:\n"
+            f" - {canonical_names_dashed}\n"
+            f"Platform: {context.subdir}\n"
+            f"Collecting package metadata ({self._repodata_fn})"
+        )
+
+    def _collect_channel_list(self, in_state: SolverInputState) -> list[Channel]:
+        # Aggregate channels and subdirs
+        deduped_channels = {}
+        for channel in chain(
+            self.channels, in_state.channels_from_specs(), in_state.maybe_free_channel()
+        ):
+            if channel_platform := getattr(channel, "platform", None):
+                if channel_platform not in self.subdirs:
+                    log.info(
+                        "Channel %s defines platform %s which is not part of subdirs=%s. "
+                        "Ignoring platform attribute...",
+                        channel,
+                        channel_platform,
+                        self.subdirs,
+                    )
+                # Remove 'Channel.platform' to avoid missing subdirs. Channel.urls() will ignore
+                # our explicitly passed subdirs if .platform is defined!
+                channel = Channel(**{k: v for k, v in channel.dump().items() if k != "platform"})
+            deduped_channels[channel] = None
+        return list(deduped_channels)
+
+    def _collect_channels_subdirs_from_conda_build(
+        self,
+        seen: set[Channel] | None = None,
+    ) -> list[Channel]:
+        if self._called_from_conda_build():
+            seen = seen or set()
+            # We need to recover the local dirs (conda-build's local, output_folder, etc)
+            # from the index. This is a bit of a hack, but it works.
+            conda_build_channels = {}
+            for record in self._index or {}:
+                if record.channel.scheme == "file":
+                    # Remove 'Channel.platform' to avoid missing subdirs. Channel.urls()
+                    # will ignore our explicitly passed subdirs if .platform is defined!
+                    channel = Channel(
+                        **{k: v for k, v in record.channel.dump().items() if k != "platform"}
+                    )
+                    if channel not in seen:
+                        conda_build_channels.setdefault(channel)
+            return list(conda_build_channels)
+        return []
+
+    @time_recorder(module_name=__name__)
+    def _collect_all_metadata(
+        self,
+        channels: Iterable[Channel],
+        conda_build_channels: Iterable[Channel],
+        subdirs: Iterable[str],
+    ) -> RattlerIndexHelper:
+        index = RattlerIndexHelper(
+            channels=[*conda_build_channels, *channels],
+            subdirs=subdirs,
+            repodata_fn=self._repodata_fn,
+            pkgs_dirs=context.pkgs_dirs if context.offline else (),
+        )
+        for channel in conda_build_channels:
+            index.reload_channel(channel)
+        return index
+
+    # endregion
     # region Solve
+
+    def _solving_loop_spinner_message(self) -> str:
+        """This shouldn't be our responsibility, but the CLI / app's..."""
+        prefix_name = os.path.basename(self.prefix)
+        if self._called_from_conda_build():
+            if "_env" in prefix_name:
+                env_name = "_".join(prefix_name.split("_")[:3])
+                return f"Solving environment ({env_name})"
+            else:
+                # https://github.com/conda/conda-build/blob/e0884b626a/conda_build/environ.py#L1035-L1036
+                return "Getting pinned dependencies"
+        return "Solving environment"
 
     def _solving_loop(
         self,
@@ -233,20 +332,10 @@ class RattlerSolver(LibMambaSolver):
           variant.
         - virtual_packages: Details of the system.
         """
-        if os.environ.get("OLD_SOLVE"):
-            return self._solve_attempt_old(in_state, out_state, index, attempt)
         solve_kwargs = self._collect_specs(in_state, out_state)
-        dumped = json.dumps(solve_kwargs, indent=2, default=str, sort_keys=True)
         if log.isEnabledFor(logging.DEBUG):
+            dumped = json.dumps(solve_kwargs, indent=2, default=str, sort_keys=True)
             log.debug("Solver input:\n%s", dumped)
-        if not os.environ.get("CI"):
-            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
-                f.write(f"Attempt: {attempt}\n")
-                f.write(f"Removing: {in_state.is_removing}\n")
-                f.write(f"Installed: {in_state.installed.keys()}\n")
-                f.write(f"History: {in_state.history.keys()}\n")
-                f.write(f"Conflicts: {out_state.conflicts.keys()}\n")
-                f.write(f"Input: {dumped}\n")
         try:
             solution = asyncio.run(
                 rattler.solve_with_sparse_repodata(
@@ -262,17 +351,10 @@ class RattlerSolver(LibMambaSolver):
                 )
             )
         except RattlerSolverError as exc:
-            if not os.environ.get("CI"):
-                with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
-                    f.write(f"Exception: {exc}\n-------\n")
             self._maybe_raise_for_problems(str(exc), out_state)
             return exc
         else:
             out_state.conflicts.clear()
-            if not os.environ.get("CI"):
-                with open("/Users/jrodriguez/devel/conda-rattler-solver/debug.txt", "a") as f:
-                    records = "\n- ".join([str(x.channel) + "::" + str(x) for x in solution])
-                    f.write(f"Solution:\n- {records}\n-------\n")
             return solution
 
     def _collect_specs(
@@ -282,6 +364,8 @@ class RattlerSolver(LibMambaSolver):
     ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
         if in_state.is_removing:
             return self._collect_specs_for_remove(in_state, out_state)
+        elif self._called_from_conda_build():
+            return self._collect_specs_for_conda_build(in_state)
 
         specs: list[rattler.MatchSpec] = []
         constraints: list[rattler.MatchSpec] = []
@@ -399,7 +483,7 @@ class RattlerSolver(LibMambaSolver):
             ],
         }
 
-    def _collect_specs_for_remove(  # WIP
+    def _collect_specs_for_remove(
         self,
         in_state: SolverInputState,
         out_state: SolverOutputState,
@@ -458,122 +542,6 @@ class RattlerSolver(LibMambaSolver):
         }
 
     # endregion
-
-    def _solve_attempt_old(
-        self,
-        in_state: SolverInputState,
-        out_state: SolverOutputState,
-        index: RattlerIndexHelper,
-        attempt: int = 0,
-    ) -> RattlerSolverError | list[rattler.RepoDataRecord]:
-        if in_state.is_removing:
-            jobs = self._specs_to_request_jobs_remove(in_state, out_state)
-            jobs = {Request.Remove: jobs.pop(Request.Remove, ()), **jobs}
-        elif self._called_from_conda_build():
-            jobs = self._specs_to_request_jobs_conda_build(in_state, out_state)
-        else:
-            jobs = self._specs_to_request_jobs_add(in_state, out_state)
-        virtual_packages = [
-            rattler.GenericVirtualPackage(
-                rattler.PackageName(pkg.name), rattler.Version(pkg.version), pkg.build
-            )
-            for pkg in in_state.virtual.values()
-        ]
-        # Request.Pin,
-        # Request.Install,
-        # Request.Update,
-        # Request.Keep,
-        # Request.Freeze,
-        # Request.Remove,
-        remove = [
-            MatchSpec(spec).name
-            for request, task_specs in jobs.items()
-            for spec in task_specs
-            if request in (Request.Remove, Request.Update) and "*" not in MatchSpec(spec).name
-        ]
-
-        specs = []
-        constrained_specs = []
-        pinned_packages = []
-        locked_packages = []
-        for request, task_specs in jobs.items():
-            if request in (Request.Install, Request.Update):
-                specs.extend(task_specs)
-            elif request == Request.Remove:
-                for spec in task_specs:
-                    match_spec = MatchSpec(spec)
-                    if "*" in match_spec.name:
-                        # TODO: Improve logic here; too many loops
-                        for pkg_name, pkg in in_state.installed.items():
-                            if match_spec.match(pkg):
-                                constrained_specs.append(f"{pkg_name}<0.0.0a0")
-                                remove.append(pkg_name)
-                    else:
-                        remove.append(match_spec.name)
-                        constrained_specs.append(f"{match_spec.name}<0.0.0a0")
-            elif request == Request.Pin:
-                constrained_specs.extend(task_specs)
-            elif request == Request.Keep:
-                for spec in task_specs:
-                    if MatchSpec(spec).name in remove:
-                        continue
-                    if not in_state.is_removing:
-                        specs.append(spec)
-                    for record in in_state.installed.values():
-                        if MatchSpec(spec).match(record):
-                            locked_packages.append(
-                                self._prefix_record_to_rattler_prefix_record(record)
-                            )
-            elif request == Request.Freeze:
-                for spec in task_specs:
-                    if MatchSpec(spec).name in remove:
-                        continue
-                    for record in in_state.installed.values():
-                        if MatchSpec(spec).match(record):
-                            pinned_packages.append(
-                                self._prefix_record_to_rattler_prefix_record(record)
-                            )
-        # remove any packages that should be updated from the locked_packages
-        locked_packages = [record for record in locked_packages if record.name not in remove]
-
-        dumped = dict(
-            specs=[rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs],
-            locked_packages=locked_packages,
-            pinned_packages=pinned_packages,
-            constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
-        )
-        dumped = json.dumps(dumped, indent=2, default=str, sort_keys=True)
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Solver input:\n%s", dumped)
-        if not os.environ.get("CI"):
-            with open("/Users/jrodriguez/devel/conda-rattler-solver/debug-old.txt", "a") as f:
-                f.write(str(in_state.installed.keys()))
-                f.write(dumped + "\n----\n")
-        try:
-            solution = asyncio.run(
-                rattler.solve_with_sparse_repodata(
-                    specs=[
-                        rattler.MatchSpec(str(s).rstrip("=").replace("=[", "[")) for s in specs
-                    ],
-                    sparse_repodata=[info.repo for info in index._index.values()],
-                    locked_packages=locked_packages,
-                    pinned_packages=pinned_packages,
-                    virtual_packages=virtual_packages,
-                    channel_priority=(
-                        rattler.ChannelPriority.Strict
-                        if context.channel_priority == ChannelPriority.STRICT
-                        else rattler.ChannelPriority.Disabled
-                    ),
-                    strategy="highest",
-                    constraints=[rattler.MatchSpec(str(s)) for s in constrained_specs],
-                )
-            )
-        except RattlerSolverError as exc:
-            self._maybe_raise_for_problems(str(exc), out_state)
-            return exc
-        else:
-            out_state.conflicts.clear()
-            return solution
 
     # region Error reporting
 
@@ -637,6 +605,33 @@ class RattlerSolver(LibMambaSolver):
         log.debug("Attempt failed with %s conflicts:\n%s", len(unsatisfiable), problems)
         out_state.conflicts.update(unsatisfiable)
 
+    def _maybe_raise_for_conda_build(
+        self,
+        conflicting_specs: Mapping[str, MatchSpec],
+        message: str = None,
+    ) -> None:
+        # TODO: Remove this hack for conda-build compatibility >_<
+        # conda-build expects a slightly different exception format
+        # good news is that we don't need to retry much, because all
+        # conda-build envs are fresh - if we found a conflict, we report
+        # right away to let conda build handle it
+        if not self._called_from_conda_build():
+            return
+        if not conflicting_specs:
+            return
+        from ._conda_build_exceptions import ExplainedDependencyNeedsBuildingError
+
+        # the patched index should contain the arch we are building this env for
+        # if the index is empty, we default to whatever platform we are running on
+        subdir = next((subdir for subdir in self.subdirs if subdir != "noarch"), context.subdir)
+        exc = ExplainedDependencyNeedsBuildingError(
+            packages=list(conflicting_specs.keys()),
+            matchspecs=list(conflicting_specs.values()),
+            subdir=subdir,
+            explanation=message,
+        )
+        raise exc
+
     def _export_solved_records(self, records, out_state):
         out_state.records.clear()
         for rattler_record in records:
@@ -674,3 +669,44 @@ class RattlerSolver(LibMambaSolver):
         if "/" in match_spec.name:
             raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
         return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
+
+    def _called_from_conda_build(self) -> bool:
+        """
+        conda build calls the solver via `conda.plan.install_actions`, which
+        overrides Solver._index (populated in the classic solver, but empty for us)
+        with a custom index. We can use this to detect whether conda build is in use
+        and apply some compatibility fixes.
+        """
+        return (
+            # conda_build.environ.get_install_actions will always pass a custom 'index'
+            # which conda.plan.install_actions uses to override our null Solver._index
+            getattr(self, "_index", None)
+            # Is conda build in use? In that case, it should have been imported
+            and "conda_build" in sys.modules
+            # Confirm conda_build.environ's 'get_install_actions' and conda.plan's
+            # 'install_actions' are in the call stack. We don't check order or
+            # contiguousness, but what are the chances at this point...?
+            # frame[3] contains the name of the function in that frame of the stack
+            and {"install_actions", "get_install_actions"} <= {frame[3] for frame in stack()}
+        )
+
+    def _collect_specs_for_conda_build(
+        self,
+        in_state: SolverInputState,
+    ) -> dict[str, list[rattler.MatchSpec] | list[rattler.PackageRecord]]:
+        specs = []
+        for name, spec in in_state.requested.items():
+            if name.startswith("__"):
+                continue
+            spec = fix_version_field_for_conda_build(spec)
+            specs.append(spec.conda_build_form())
+
+        return {
+            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "constraints": [],
+            "locked_packages": [],
+            "pinned_packages": [],
+        }
+
+    def _notify_conda_outdated(self, link_precs, *args, **kwargs):
+        notify_conda_outdated(*args, **kwargs)

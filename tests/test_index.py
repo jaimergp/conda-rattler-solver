@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 from conda.base.context import reset_context
-from conda.common.compat import on_win
 from conda.core.subdir_data import SubdirData
 from conda.gateways.logging import initialize_logging
 from conda.models.channel import Channel
@@ -50,7 +49,7 @@ def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2
     """
     Defaults is particular in the sense that it offers both .tar.bz2 and .conda for LOTS
     of packages. SubdirData ignores .tar.bz2 entries if they have a .conda counterpart.
-    So if we count all the packages in each implementation, libmamba's has way more.
+    So if we count all the packages in each implementation, rattler's has way more.
     To remain accurate, we test this with `use_only_tar_bz2`:
         - When true, we only count .tar.bz2
         - When false, we only count .conda

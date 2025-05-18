@@ -91,7 +91,7 @@ def test_gpu_cpu_mutexes():
     This behaviour difference is known and explained at
     https://github.com/conda/conda-libmamba-solver/issues/131#issuecomment-1440745813.
 
-    If at some point this changes (e.g. libmamba fix), this test will capture it.
+    If at some point this changes (e.g. rattler fix), this test will capture it.
     """
     args = (
         "create",
