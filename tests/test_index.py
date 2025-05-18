@@ -26,12 +26,12 @@ def test_given_channels(monkeypatch: pytest.MonkeyPatch, tmp_path: os.PathLike):
     rattler_index = RattlerIndexHelper.from_platform_aware_channel(
         channel=Channel("conda-test/noarch")
     )
-    assert rattler_index.db.repo_count() == 1
+    assert len(rattler_index._index) == 1
 
     conda_index = SubdirData(Channel("conda-test/noarch"))
     conda_index.load()
 
-    assert rattler_index.db.package_count() == len(tuple(conda_index.iter_records()))
+    assert rattler_index.n_packages() == len(tuple(conda_index.iter_records()))
 
 
 @pytest.mark.parametrize(

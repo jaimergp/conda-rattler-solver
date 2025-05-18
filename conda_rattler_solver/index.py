@@ -23,6 +23,7 @@ from .utils import empty_repodata_dict, rattler_record_to_conda_record
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from typing import Self
 
     from conda.common.path import PathsType
     from conda.models.records import PackageCacheRecord, PackageRecord
@@ -58,6 +59,13 @@ class RattlerIndexHelper:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
+    @classmethod
+    def from_platform_aware_channel(cls, channel: Channel) -> Self:
+        if not channel.platform:
+            raise ValueError(f"Channel {channel} must define 'platform' attribute.")
+        subdir = channel.platform
+        channel = Channel(**{k: v for k, v in channel.dump().items() if k != "platform"})
+        return cls(channels=(channel,), subdirs=(subdir,))
 
     @property
     def channels(self):
@@ -126,12 +134,12 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        # for multichannel_name, channels in context.custom_multichannels.items():
-        #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
-        #         rattler_channel = rattler.Channel(multichannel_name)
-        #         break
-        # else:
-        rattler_channel = rattler.Channel(noauth_url_sans_subdir)
+        for multichannel_name, channels in context.custom_multichannels.items():
+            if noauth_url_sans_subdir in [c.base_url for c in channels]:
+                rattler_channel = rattler.Channel(multichannel_name)
+                break
+        else:
+            rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
