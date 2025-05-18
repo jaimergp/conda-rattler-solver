@@ -53,6 +53,9 @@ log = logging.getLogger(f"conda.{__name__}")
 
 
 class RattlerSolver(Solver):
+    MAX_SOLVER_ATTEMPTS_CAP = 10
+    _uses_ssc = False
+
     @staticmethod
     @cache
     def user_agent() -> str:
