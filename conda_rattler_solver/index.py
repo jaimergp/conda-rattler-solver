@@ -90,7 +90,7 @@ class RattlerIndexHelper:
         filter_: callable | None = None,
     ) -> int:
         count = 0
-        seen = set()
+        seen = set()  # TODO: Remove when https://github.com/conda/rattler/issues/1330 is fixed
         for info in (repos or self._index.values()):
             if filter_ is not None:
                 for name in info.repo.package_names():
