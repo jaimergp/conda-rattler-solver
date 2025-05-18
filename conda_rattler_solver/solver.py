@@ -671,7 +671,7 @@ class RattlerSolver(Solver):
 
     def _match_spec_to_rattler_match_spec(self, spec: MatchSpec) -> rattler.MatchSpec:
         match_spec = MatchSpec(spec)
-        if "/" in match_spec.name:
+        if os.sep in match_spec.name or "/" in match_spec.name:
             raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
         return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
 
