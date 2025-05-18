@@ -63,7 +63,7 @@ jobs:
           # changed some paths:
           filters: |
             code:
-              - 'conda_libmamba_solver/**'
+              - 'conda_rattler_solver/**'
               - '*.py'
               - '.github/workflows/tests.yml'
               - 'tests/**'
@@ -230,7 +230,7 @@ jobs:
         # test all lower versions (w/ defaults) and upper version (w/ defaults and conda-forge)
         python-version: ['3.10']  # ['3.8', '3.9', '3.10', '3.11', '3.12']
         default-channel: ['conda-forge']  # [defaults, conda-forge]
-        test-type: [unit, integration] # [conda-rattler-solver, unit, integration]  # CONDA-RATTLER-SOLVER CHANGE
+        test-type: [conda-rattler-solver, unit, integration]  # CONDA-RATTLER-SOLVER CHANGE
         test-group: [1, 2, 3]
         exclude:
         #   - python-version: '3.8'
@@ -245,10 +245,10 @@ jobs:
         #     default-channel: conda-forge
           - test-type: unit
             test-group: 3
-        #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
-        #     test-group: 2  # CONDA-RATTLER-SOLVER CHANGE
-        #   - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
-        #     test-group: 3  # CONDA-RATTLER-SOLVER CHANGE
+          - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
+            test-group: 2  # CONDA-RATTLER-SOLVER CHANGE
+          - test-type: conda-rattler-solver  # CONDA-RATTLER-SOLVER CHANGE
+            test-group: 3  # CONDA-RATTLER-SOLVER CHANGE
     env:
       PYTEST_MARKER: ${{ matrix.test-type == 'unit' && 'not integration' || 'integration' }}
       PYTEST_SPLITS: ${{ matrix.test-type == 'unit' && '2' || '3' }}

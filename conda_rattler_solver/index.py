@@ -23,6 +23,7 @@ from .utils import empty_repodata_dict, rattler_record_to_conda_record
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from typing import Self
 
     from conda.common.path import PathsType
     from conda.models.records import PackageCacheRecord, PackageRecord
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(f"conda.{__name__}")
 
 
-@dataclass(frozen=True)
+@dataclass
 class _ChannelRepoInfo:
     "A dataclass mapping conda Channels, libmamba Repos and URLs"
 
@@ -59,9 +60,54 @@ class RattlerIndexHelper:
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
 
+    @classmethod
+    def from_platform_aware_channel(cls, channel: Channel) -> Self:
+        if not channel.platform:
+            raise ValueError(f"Channel {channel} must define 'platform' attribute.")
+        subdir = channel.platform
+        channel = Channel(**{k: v for k, v in channel.dump().items() if k != "platform"})
+        return cls(channels=(channel,), subdirs=(subdir,))
+
     @property
-    def channels(self):
+    def channels(self) -> list[Channel]:
         return [Channel(c) for c in self._channels]
+
+    def reload_channel(self, channel: Channel) -> None:
+        urls = {}
+        for url in channel.urls(with_credentials=False, subdirs=self._subdirs):
+            for repo_info in self._index.values():
+                if repo_info.noauth_url == url:
+                    log.debug("Reloading repo %s", repo_info.noauth_url)
+                    urls[repo_info.full_url] = channel
+        for new_repo_info in self._load_channels(urls).values():
+            for repo_info in self._index.values():
+                if repo_info.noauth_url == new_repo_info.noauth_url:
+                    repo_info.repo = new_repo_info.repo
+
+    def n_packages(
+        self,
+        repos: Iterable[_ChannelRepoInfo] | None = None,
+        filter_: callable | None = None,
+    ) -> int:
+        count = 0
+        seen = set()  # TODO: Remove when https://github.com/conda/rattler/issues/1330 is fixed
+        for info in (repos or self._index.values()):
+            if filter_ is not None:
+                for name in info.repo.package_names():
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    for record in info.repo.load_records(rattler.PackageName(name)):
+                        if filter_(record):
+                            count += 1
+            else:
+                for name in info.repo.package_names():
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    for record in info.repo.load_records(rattler.PackageName(name)):
+                        count += 1
+        return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
         orig_key = key
@@ -105,8 +151,14 @@ class RattlerIndexHelper:
     def _json_path_to_repo_info(self, url: str, json_path: str) -> _ChannelRepoInfo:
         channel = Channel.from_url(url)
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
+        noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        rattler_channel = rattler.Channel(noauth_url.rsplit("/", 1)[0])
+        # for multichannel_name, channels in context.custom_multichannels.items():
+        #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
+        #         rattler_channel = rattler.Channel(multichannel_name)
+        #         break
+        # else:
+        rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
@@ -116,11 +168,11 @@ class RattlerIndexHelper:
             local_json=json_path,
         )
 
-    def _load_channels(self) -> dict[str, _ChannelRepoInfo]:
+    def _urls_from_channels(self, channels: Iterable[Channel | str] | None = None) -> tuple[str]:
         # 1. Obtain and deduplicate URLs from channels
         urls = []
         seen_noauth = set()
-        for _c in self._channels:
+        for _c in channels or self._channels:
             c = Channel(_c)
             noauth_urls = c.urls(with_credentials=False, subdirs=self._subdirs)
             if seen_noauth.issuperset(noauth_urls):
@@ -137,7 +189,11 @@ class RattlerIndexHelper:
                     urls.append(url)
                     seen_noauth.add(url)
 
-        urls = tuple(dict.fromkeys(urls))  # de-duplicate
+        return tuple(dict.fromkeys(urls))  # de-duplicate
+
+    def _load_channels(self, urls: Iterable[str] | None = None) -> dict[str, _ChannelRepoInfo]:
+        if urls is None:
+            urls = self._urls_from_channels()
 
         # 2. Fetch URLs (if needed)
         Executor = (
