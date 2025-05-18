@@ -69,7 +69,7 @@ class RattlerIndexHelper:
         return cls(channels=(channel,), subdirs=(subdir,))
 
     @property
-    def channels(self):
+    def channels(self) -> list[Channel]:
         return [Channel(c) for c in self._channels]
 
     def reload_channel(self, channel: Channel) -> None:
@@ -89,16 +89,22 @@ class RattlerIndexHelper:
         repos: Iterable[_ChannelRepoInfo] | None = None,
         filter_: callable | None = None,
     ) -> int:
-        repos = repos or list(self._index.values())
         count = 0
-        for info in repos:
-            if filter_:
+        seen = set()
+        for info in (repos or self._index.values()):
+            if filter_ is not None:
                 for name in info.repo.package_names():
+                    if name in seen:
+                        continue
+                    seen.add(name)
                     for record in info.repo.load_records(rattler.PackageName(name)):
                         if filter_(record):
                             count += 1
             else:
                 for name in info.repo.package_names():
+                    if name in seen:
+                        continue
+                    seen.add(name)
                     for record in info.repo.load_records(rattler.PackageName(name)):
                         count += 1
         return count

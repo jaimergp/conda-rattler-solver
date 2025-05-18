@@ -41,7 +41,7 @@ def test_given_channels(monkeypatch: pytest.MonkeyPatch, tmp_path: os.PathLike):
         pytest.param("", id="CONDA_USE_ONLY_TAR_BZ2=false"),
     ),
 )
-@pytest.mark.xfail(reason="Same as https://github.com/mamba-org/mamba/issues/3250", strict=True)
+# @pytest.mark.xfail(reason="Same as https://github.com/mamba-org/mamba/issues/3250", strict=True)
 def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2: bool):
     """
     Defaults is particular in the sense that it offers both .tar.bz2 and .conda for LOTS
@@ -53,13 +53,9 @@ def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2
     """
     monkeypatch.setenv("CONDA_USE_ONLY_TAR_BZ2", only_tar_bz2)
     reset_context()
-    rattler_index = RattlerIndexHelper(
-        channels=[Channel("defaults")],
-        subdirs=("noarch",),
-        pkgs_dirs=(),  # do not load local cache as a channel
-    )
-    n_repos = 3 if on_win else 2
-    assert len(rattler_index._index) == n_repos
+    main_noarch_channel = Channel.from_url("https://repo.anaconda.com/pkgs/main/noarch")
+    rattler_index = RattlerIndexHelper.from_platform_aware_channel(main_noarch_channel)
+    assert len(rattler_index._index) == 1
 
     rattler_dot_conda_total = rattler_index.n_packages(
         filter_=lambda pkg: pkg.url.endswith(".conda")
@@ -70,7 +66,7 @@ def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2
 
     conda_dot_conda_total = 0
     conda_tar_bz2_total = 0
-    for channel_url in Channel("defaults/noarch").urls(subdirs=("noarch",)):
+    for channel_url in main_noarch_channel.urls(subdirs=("noarch",)):
         conda_index = SubdirData(Channel(channel_url))
         conda_index.load()
         for pkg in conda_index.iter_records():
