@@ -14,7 +14,7 @@ from conda.base.constants import REPODATA_FN
 from conda.base.context import context
 from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
 from conda.common.serialize import json_dump
-from conda.common.url import path_to_url, percent_decode, remove_auth, split_anaconda_token
+from conda.common.url import path_to_url, remove_auth, split_anaconda_token
 from conda.core.package_cache_data import PackageCacheData
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
@@ -33,7 +33,7 @@ log = logging.getLogger(f"conda.{__name__}")
 
 @dataclass
 class _ChannelRepoInfo:
-    "A dataclass mapping conda Channels, libmamba Repos and URLs"
+    "A dataclass mapping conda Channels, rattler.SparseRepoData, URLs and JSON paths"
 
     channel: Channel | None
     repo: rattler.SparseRepoData
@@ -91,7 +91,7 @@ class RattlerIndexHelper:
     ) -> int:
         count = 0
         seen = set()  # TODO: Remove when https://github.com/conda/rattler/issues/1330 is fixed
-        for info in (repos or self._index.values()):
+        for info in repos or self._index.values():
             if filter_ is not None:
                 for name in info.repo.package_names():
                     if name in seen:
@@ -110,24 +110,12 @@ class RattlerIndexHelper:
         return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
-        orig_key = key
         if not key.startswith("file://"):
             # The conda functions (specifically remove_auth) assume the input
             # is a url; a file uri on windows with a drive letter messes them up.
             # For the rest, we remove all forms of authentication
             key = split_anaconda_token(remove_auth(key))[0]
-        try:
-            return self._index[key]
-        except KeyError as exc:
-            # some libmamba versions return encoded URLs
-            try:
-                return self._index[percent_decode(key)]
-            except KeyError:
-                pass  # raise original error below
-            raise KeyError(
-                f"Channel info for {orig_key} ({key}) not found. "
-                f"Available keys: {list(self._index)}"
-            ) from exc
+        return self._index[key]
 
     def _fetch_channel(self, url: str) -> tuple[str, os.PathLike]:
         channel = Channel.from_url(url)

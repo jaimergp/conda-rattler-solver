@@ -43,7 +43,7 @@ class TestRattlerSolver(SolverTests):
     @property
     def tests_to_skip(self):
         return {
-            "conda-libmamba-solver does not support features": [
+            "conda-rattler-solver does not support features": [
                 "test_iopro_mkl",
                 "test_iopro_nomkl",
                 "test_mkl",
@@ -109,13 +109,8 @@ def test_defaults_specs_work(conda_cli: CondaCLIFixture) -> None:
     """
     See https://github.com/conda/conda-libmamba-solver/issues/173
 
-    `conda install defaults::<pkg_name>` fails with libmamba due to a
-    mapping issue between conda and libmamba.Repo channel names.
     defaults is secretly (main, r and msys2), and repos are built using those
-    actual channels. A bug in libmamba fails to map this relationship.
-
-    We are testing our workaround (https://github.com/conda/conda-libmamba-solver/issues/173)
-    works for now, but we should probably help fix this in libmamba.
+    actual channels. Multichannels are not present in rattler so far.
     """
     out, err, rc = conda_cli(
         "create",
