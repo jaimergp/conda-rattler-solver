@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(f"conda.{__name__}")
 
 
-@dataclass(frozen=True)
+@dataclass
 class _ChannelRepoInfo:
     "A dataclass mapping conda Channels, libmamba Repos and URLs"
 
@@ -59,6 +59,7 @@ class RattlerIndexHelper:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
+
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
         if not channel.platform:
@@ -70,6 +71,18 @@ class RattlerIndexHelper:
     @property
     def channels(self):
         return [Channel(c) for c in self._channels]
+
+    def reload_channel(self, channel: Channel) -> None:
+        urls = {}
+        for url in channel.urls(with_credentials=False, subdirs=self._subdirs):
+            for repo_info in self._index.values():
+                if repo_info.noauth_url == url:
+                    log.debug("Reloading repo %s", repo_info.noauth_url)
+                    urls[repo_info.full_url] = channel
+        for new_repo_info in self._load_channels(urls).values():
+            for repo_info in self._index.values():
+                if repo_info.noauth_url == new_repo_info.noauth_url:
+                    repo_info.repo = new_repo_info.repo
 
     def n_packages(
         self,
@@ -149,11 +162,11 @@ class RattlerIndexHelper:
             local_json=json_path,
         )
 
-    def _load_channels(self) -> dict[str, _ChannelRepoInfo]:
+    def _urls_from_channels(self, channels: Iterable[Channel | str] | None = None) -> tuple[str]:
         # 1. Obtain and deduplicate URLs from channels
         urls = []
         seen_noauth = set()
-        for _c in self._channels:
+        for _c in channels or self._channels:
             c = Channel(_c)
             noauth_urls = c.urls(with_credentials=False, subdirs=self._subdirs)
             if seen_noauth.issuperset(noauth_urls):
@@ -170,7 +183,11 @@ class RattlerIndexHelper:
                     urls.append(url)
                     seen_noauth.add(url)
 
-        urls = tuple(dict.fromkeys(urls))  # de-duplicate
+        return tuple(dict.fromkeys(urls))  # de-duplicate
+
+    def _load_channels(self, urls: Iterable[str] | None = None) -> dict[str, _ChannelRepoInfo]:
+        if urls is None:
+            urls = self._urls_from_channels()
 
         # 2. Fetch URLs (if needed)
         Executor = (
