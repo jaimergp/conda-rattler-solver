@@ -9,15 +9,6 @@ from __future__ import annotations
 
 import sys
 from subprocess import run
-from typing import TYPE_CHECKING
-
-import pytest
-from conda.base.context import context, fresh_context
-from conda.exceptions import CondaEnvironmentError
-
-if TYPE_CHECKING:
-    from conda.testing.fixtures import CondaCLIFixture
-    from pytest import MonkeyPatch
 
 
 def print_and_check_output(*args, **kwargs):
@@ -27,19 +18,6 @@ def print_and_check_output(*args, **kwargs):
     print("stdout", process.stdout, "---", "stderr", process.stderr, sep="\n")
     process.check_returncode()
     return process
-
-
-@pytest.mark.xfail(reason="base protections not enabled anymore")
-def test_protection_for_base_env(monkeypatch: MonkeyPatch, conda_cli: CondaCLIFixture) -> None:
-    with pytest.raises(CondaEnvironmentError), fresh_context(CONDA_SOLVER="rattler"):
-        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-        conda_cli(
-            "install",
-            f"--prefix={context.root_prefix}",
-            "--dry-run",
-            "scipy",
-            "--solver=rattler",
-        )
 
 
 def test_cli_flag_in_help():
