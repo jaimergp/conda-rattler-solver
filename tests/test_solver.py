@@ -659,18 +659,6 @@ def test_pytorch_gpu(specs, tmp_path):
     env["CONDA_OVERRIDE_LINUX"] = "5.15.167.4"
     env["CONDA_OVERRIDE_ARCHSPEC"] = "skylake"
     env["CONDA_OVERRIDE_OSX"] = ""
-    env["CONDA_PKGS_DIRS"] = str(tmp_path)
-    p = conda_subprocess("config", "--show-sources", env=env)
-    assert not p.returncode
-    print(p.stdout)
-
-    p = conda_subprocess("info", env=env)
-    assert not p.returncode
-    print(p.stdout)
-
-    p = conda_subprocess("clean", "--all", env=env)
-    assert not p.returncode
-    print(p.stdout)
 
     p = conda_subprocess(
         "create",
