@@ -147,12 +147,12 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        for multichannel_name, channels in context.custom_multichannels.items():
-            if noauth_url_sans_subdir in [c.base_url for c in channels]:
-                rattler_channel = rattler.Channel(multichannel_name)
-                break
-        else:
-            rattler_channel = rattler.Channel(noauth_url_sans_subdir)
+        # for multichannel_name, channels in context.custom_multichannels.items():
+        #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
+        #         rattler_channel = rattler.Channel(multichannel_name)
+        #         break
+        # else:
+        rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
