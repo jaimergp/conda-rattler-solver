@@ -51,6 +51,8 @@ class RattlerIndexHelper:
         repodata_fn: str = REPODATA_FN,
         pkgs_dirs: PathsType = (),
     ):
+        self._unlink_on_del: list[Path] = []
+
         self._channels = context.channels if channels is None else channels
         self._subdirs = context.subdirs if subdirs is None else subdirs
         self._repodata_fn = repodata_fn
@@ -61,7 +63,6 @@ class RattlerIndexHelper:
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
 
-        self._unlink_on_del: list[Path] = []
 
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
