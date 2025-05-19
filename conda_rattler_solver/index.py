@@ -74,7 +74,8 @@ class RattlerIndexHelper:
         self._subdirs = context.subdirs if subdirs is None else subdirs
         self._repodata_fn = repodata_fn
 
-        self._index = self._load_channels()
+        self._index = {}
+        self._index.update(self._load_channels())
         if pkgs_dirs:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
