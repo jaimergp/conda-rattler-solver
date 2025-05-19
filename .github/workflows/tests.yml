@@ -165,6 +165,20 @@ jobs:
       - name: Conda List
         run: conda list --show-channel-urls
 
+      - name: Setup PowerShell
+        # for tests/shell, so only necessary for integration tests
+        if: matrix.test-type == 'integration'
+        run: |
+          Invoke-Expression "& { $(Invoke-RestMethod https://aka.ms/install-powershell.ps1) }"
+          "PWSHPATH=$env:LOCALAPPDATA\Microsoft\powershell" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: PowerShell Info
+        # for tests/shell, so only necessary for integration tests
+        if: matrix.test-type == 'integration'
+        run: |
+          Get-Command -All powershell
+          Get-Command -All "$env:PWSHPATH\pwsh.exe"
+
       - name: Run Upstream Tests
         working-directory: conda  # CONDA-RATTLER-SOLVER CHANGE
         if: ${{ matrix.test-type != 'conda-rattler-solver' }}  # CONDA-RATTLER-SOLVER CHANGE
@@ -176,21 +190,17 @@ jobs:
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
           -m "${{ env.PYTEST_MARKER }}"
 
-      # CONDA-RATTLER-SOLVER CHANGE
+      # CONDA-LIBMAMBA-SOLVER CHANGE
       - name: Run conda-rattler-solver Tests
         working-directory: conda-rattler-solver
         if: ${{ matrix.test-type == 'conda-rattler-solver' }}
-        shell: cmd /C CALL {0}
+        shell: bash -el {0}
         run: |
-          CALL python -m pip install -e ../conda/ --no-deps
-          if errorlevel 1 exit 1
-          CALL python -m conda init --all
-          if errorlevel 1 exit 1
-          CALL %CONDA_PREFIX%\Scripts\activate.bat
-          if errorlevel 1 exit 1
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16 || exit 1
-          exit 0
-      #/ CONDA-RATTLER-SOLVER CHANGE
+          python -m pip install -e ../conda/ --no-deps
+          python -m conda init --all
+          . $CONDA_PREFIX/etc/profile.d/conda.sh
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
+      #/ CONDA-LIBMAMBA-SOLVER CHANGE
 
       - name: Upload Coverage
         uses: codecov/codecov-action@v4
