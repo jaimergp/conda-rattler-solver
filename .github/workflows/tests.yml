@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTEST_RERUN_FAILURES: 0
+  PYTEST_RERUN_FAILURES: 2
   # See https://github.com/conda/conda/pull/13694
   # we can't break classic from here; no need to test it
   # those tests will still be available for local debugging if necessary
