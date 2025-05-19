@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
-import shutil
 import sys
 from dataclasses import dataclass
 from functools import partial
@@ -21,7 +19,7 @@ from conda.core.package_cache_data import PackageCacheData
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
 
-from .utils import empty_repodata_dict, random_hex, rattler_record_to_conda_record
+from .utils import empty_repodata_dict, rattler_record_to_conda_record
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -42,22 +40,6 @@ class _ChannelRepoInfo:
     full_url: str
     noauth_url: str
     local_json: str | None
-
-
-# _sparse_repodata_cache: dict[str, rattler.SparseRepoData] = {}
-
-
-# def get_sparse_repodata(
-#     channel: rattler.Channel, subdir: str, json_path: os.PathLike[str]
-# ) -> rattler.SparseRepoData:
-#     json_path = str(json_path)
-#     if cached := _sparse_repodata_cache.get(json_path):
-#         if os.path.exists(json_path):
-#             return cached
-#         del _sparse_repodata_cache[json_path]
-#     new = rattler.SparseRepoData(channel, subdir, json_path)
-#     _sparse_repodata_cache[json_path] = new
-#     return new
 
 
 class RattlerIndexHelper:
@@ -154,16 +136,6 @@ class RattlerIndexHelper:
         log.debug("Fetching %s with SubdirData.repo_fetch", channel)
         subdir_data = SubdirData(channel, repodata_fn=self._repodata_fn)
         json_path, _ = subdir_data.repo_fetch.fetch_latest_path()
-        # try:
-        #     json_path, _ = subdir_data.repo_fetch.fetch_latest_path()
-        # except Exception as exc:
-        #     if "WinError" in str(exc):
-        #         path = re.search(r"'(.*?)'", str(exc))
-        #         if path:
-        #             for info in self._index.values():
-        #                 if info.local_json == path.group(0):
-        #                     info.repo = None
-        #         json_path, _ = subdir_data.repo_fetch.fetch_latest_path()
 
         return url, json_path
 
@@ -172,21 +144,7 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        # if (
-        #     os.environ.get("CI")
-        #     and os.environ.get("PYTEST_CURRENT_TEST")
-        #     and sys.platform == "win32"
-        # ):
-        #     # Ugly workaround for race conditions on Windows CI
-        #     copy_path = json_path.parent / f"{json_path.stem}.copy{random_hex()}.json"
-        #     shutil.copy(json_path, copy_path)
-        #     json_path = copy_path
-        #     self._unlink_on_del.append(copy_path)
-        # for multichannel_name, channels in context.custom_multichannels.items():
-        #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
-        #         rattler_channel = rattler.Channel(multichannel_name)
-        #         break
-        # else:
+        # TODO: Support multichannel https://github.com/conda/rattler/issues/1327
         rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
@@ -224,24 +182,16 @@ class RattlerIndexHelper:
         if urls is None:
             urls = self._urls_from_channels()
 
-        # 1. Clear SparseRepodata instances if they exist already
-        if self._index:
-            current_index_by_url = {info.full_url: info for info in self._index.values()}
-            for url in urls:
-                if info_for_this_url := current_index_by_url.get(url):
-                    noauth_url = info_for_this_url.noauth_url
-                    self._index.pop(noauth_url)
-
-        # 2. Fetch URLs (if needed)
+        # 1. Fetch URLs (if needed)
         Executor = (
             DummyExecutor
-            if context.debug or context.repodata_threads == 1 or sys.platform == "win32"
+            if context.debug or context.repodata_threads == 1
             else partial(ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads)
         )
         with Executor() as executor:
             jsons = {url: str(path) for (url, path) in executor.map(self._fetch_channel, urls)}
 
-        # 3. Create repos in same order as `urls`
+        # 2. Create repos in same order as `urls`
         index = {}
         for url in urls:
             info = self._json_path_to_repo_info(url, jsons[url])
@@ -303,7 +253,7 @@ class RattlerIndexHelper:
         return repos
 
     def search(self, spec: str) -> list[PackageRecord]:
-        # This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
+        # TODO: This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
         conda_records = []
         spec = rattler.MatchSpec(str(spec))
         for info in self._index.values():
