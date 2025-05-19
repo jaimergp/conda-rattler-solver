@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+import random
+import shutil
 import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from string import hexdigits
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
 
@@ -13,6 +16,7 @@ import rattler
 from conda.base.constants import REPODATA_FN
 from conda.base.context import context
 from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
+from conda.common.path import url_to_path
 from conda.common.serialize import json_dump
 from conda.common.url import path_to_url, remove_auth, split_anaconda_token
 from conda.core.package_cache_data import PackageCacheData
@@ -121,6 +125,9 @@ class RattlerIndexHelper:
         return self._index[key]
 
     def _fetch_channel(self, url: str) -> tuple[str, os.PathLike]:
+        if url.startswith("file://"):
+            return url, f"{url_to_path(url)}{os.path.sep}{self._repodata_fn}"
+
         channel = Channel.from_url(url)
         if not channel.subdir:
             raise ValueError(f"Channel URLs must specify a subdir! Provided: {url}")
@@ -144,6 +151,17 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
+        if (
+            sys.platform == "win32"
+            and os.environ.get("CI")
+            and os.environ.get("PYTEST_CURRENT_TEST")
+        ):
+            # TODO: Investigate why we need this race condition workaround on Windows CI only
+            random_hex = "".join(random.choices(hexdigits, k=6)).lower()
+            path_copy = json_path.parent / f"{json_path.stem}.copy-{random_hex}.json"
+            shutil.copy(json_path, path_copy)
+            json_path = path_copy
+            self._unlink_on_del.append(path_copy)
         # TODO: Support multichannel https://github.com/conda/rattler/issues/1327
         rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
@@ -264,4 +282,8 @@ class RattlerIndexHelper:
 
     def __del__(self):
         for path in self._unlink_on_del:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except Exception as exc:
+                print(exc, file=sys.stderr)  # Debug
+                print(self._index, file=sys.stderr)  # Debug
