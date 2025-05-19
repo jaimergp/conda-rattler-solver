@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import sys
 from contextlib import suppress
 from logging import getLogger
+from string import hexdigits
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -281,3 +283,7 @@ def fix_version_field_for_conda_build(spec: MatchSpec) -> MatchSpec:
                 spec_fields[1] = version_str + "*"
             return MatchSpec(" ".join(spec_fields))
     return spec
+
+
+def random_hex(length: int = 6) -> str:
+    return random.choice(hexdigits, length)

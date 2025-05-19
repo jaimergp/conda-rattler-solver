@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import atexit
 import logging
 import os
+import shutil
+import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -19,7 +20,7 @@ from conda.core.package_cache_data import PackageCacheData
 from conda.core.subdir_data import SubdirData
 from conda.models.channel import Channel
 
-from .utils import empty_repodata_dict, rattler_record_to_conda_record
+from .utils import empty_repodata_dict, random_hex, rattler_record_to_conda_record
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -59,6 +60,8 @@ class RattlerIndexHelper:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
+
+        self._unlink_on_del: list[Path] = []
 
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
@@ -141,6 +144,16 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
+        if (
+            os.environ.get("CI")
+            and os.environ.get("PYTEST_CURRENT_TEST")
+            and sys.platform == "win32"
+        ):
+            # Ugly workaround for race conditions on Windows CI
+            copy_path = json_path.parent / f"{json_path.stem}.copy{random_hex()}.json"
+            shutil.copy(json_path, copy_path)
+            json_path = copy_path
+            self._unlink_on_del.append(copy_path)
         # for multichannel_name, channels in context.custom_multichannels.items():
         #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
         #         rattler_channel = rattler.Channel(multichannel_name)
@@ -250,7 +263,7 @@ class RattlerIndexHelper:
                         local_json=f.name,
                     )
                 )
-                atexit.register(os.unlink, f.name)
+                self._unlink_on_del.append(Path(f.name))
         return repos
 
     def search(self, spec: str) -> list[PackageRecord]:
@@ -262,3 +275,7 @@ class RattlerIndexHelper:
                 if spec.matches(record):
                     conda_records.append(rattler_record_to_conda_record(record))
         return conda_records
+
+    def __del__(self):
+        for path in self._unlink_on_del:
+            path.unlink(missing_ok=True)
