@@ -42,7 +42,22 @@ class _ChannelRepoInfo:
     noauth_url: str
     local_json: str | None
 
-CachedSparseRepodata = lru_cache(rattler.SparseRepoData)
+
+_sparse_repodata_cache: dict[str, rattler.SparseRepoData] = {}
+
+
+def get_sparse_repodata(
+    channel: rattler.Channel, subdir: str, json_path: os.PathLike[str]
+) -> rattler.SparseRepoData:
+    json_path = str(json_path)
+    if cached := _sparse_repodata_cache.get(json_path):
+        if os.path.exists(json_path):
+            return cached
+        del _sparse_repodata_cache[json_path]
+    new = rattler.SparseRepoData(channel, subdir, json_path)
+    _sparse_repodata_cache[json_path] = new
+    return new
+
 
 class RattlerIndexHelper:
     def __init__(
@@ -78,12 +93,12 @@ class RattlerIndexHelper:
 
     def reload_channel(self, channel: Channel) -> None:
         urls = {}
-        CachedSparseRepodata.cache_clear()
         for url in channel.urls(with_credentials=False, subdirs=self._subdirs):
             for repo_info in self._index.values():
                 if repo_info.noauth_url == url:
                     log.debug("Reloading repo %s", repo_info.noauth_url)
                     urls[repo_info.full_url] = channel
+                    _sparse_repodata_cache.pop(url, None)
         for new_repo_info in self._load_channels(urls).values():
             for repo_info in self._index.values():
                 if repo_info.noauth_url == new_repo_info.noauth_url:
@@ -162,7 +177,7 @@ class RattlerIndexHelper:
         #         break
         # else:
         rattler_channel = rattler.Channel(noauth_url_sans_subdir)
-        repo = CachedSparseRepodata(rattler_channel, channel.subdir, json_path)
+        repo = get_sparse_repodata(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
             channel=channel,
