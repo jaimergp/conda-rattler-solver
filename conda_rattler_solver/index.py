@@ -5,7 +5,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
@@ -42,6 +42,7 @@ class _ChannelRepoInfo:
     noauth_url: str
     local_json: str | None
 
+CachedSparseRepodata = lru_cache(rattler.SparseRepoData)
 
 class RattlerIndexHelper:
     def __init__(
@@ -77,6 +78,7 @@ class RattlerIndexHelper:
 
     def reload_channel(self, channel: Channel) -> None:
         urls = {}
+        CachedSparseRepodata.cache_clear()
         for url in channel.urls(with_credentials=False, subdirs=self._subdirs):
             for repo_info in self._index.values():
                 if repo_info.noauth_url == url:
@@ -144,23 +146,23 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        if (
-            os.environ.get("CI")
-            and os.environ.get("PYTEST_CURRENT_TEST")
-            and sys.platform == "win32"
-        ):
-            # Ugly workaround for race conditions on Windows CI
-            copy_path = json_path.parent / f"{json_path.stem}.copy{random_hex()}.json"
-            shutil.copy(json_path, copy_path)
-            json_path = copy_path
-            self._unlink_on_del.append(copy_path)
+        # if (
+        #     os.environ.get("CI")
+        #     and os.environ.get("PYTEST_CURRENT_TEST")
+        #     and sys.platform == "win32"
+        # ):
+        #     # Ugly workaround for race conditions on Windows CI
+        #     copy_path = json_path.parent / f"{json_path.stem}.copy{random_hex()}.json"
+        #     shutil.copy(json_path, copy_path)
+        #     json_path = copy_path
+        #     self._unlink_on_del.append(copy_path)
         # for multichannel_name, channels in context.custom_multichannels.items():
         #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
         #         rattler_channel = rattler.Channel(multichannel_name)
         #         break
         # else:
         rattler_channel = rattler.Channel(noauth_url_sans_subdir)
-        repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
+        repo = CachedSparseRepodata(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
             repo=repo,
             channel=channel,
@@ -277,7 +279,5 @@ class RattlerIndexHelper:
         return conda_records
 
     def __del__(self):
-        if self._unlink_on_del:
-            self._index.clear()
-            for path in self._unlink_on_del:
-                path.unlink(missing_ok=True)
+        for path in self._unlink_on_del:
+            path.unlink(missing_ok=True)
