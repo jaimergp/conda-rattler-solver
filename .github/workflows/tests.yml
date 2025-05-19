@@ -30,7 +30,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTEST_RERUN_FAILURES: 2
+  PYTEST_RERUN_FAILURES: 0
+  PYTEST_RERUN_FAILURES_DELAY: 0
   # See https://github.com/conda/conda/pull/13694
   # we can't break classic from here; no need to test it
   # those tests will still be available for local debugging if necessary
@@ -72,7 +73,9 @@ jobs:
     # only run test suite if there are code changes
     needs: changes
     if: needs.changes.outputs.code == 'true'
-
+    env:
+      PYTEST_RERUN_FAILURES: 2
+      PYTEST_RERUN_FAILURES_DELAY: 5
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -188,6 +191,7 @@ jobs:
           --group=${{ matrix.test-group }}
           --splits=${{ env.PYTEST_SPLITS }}
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
+          --reruns-delay ${{ env.PYTEST_RERUN_FAILURES_DELAY }}
           -m "${{ env.PYTEST_MARKER }}"
 
       # CONDA-RATTLER-SOLVER CHANGE
@@ -199,7 +203,7 @@ jobs:
           python -m pip install -e ../conda/ --no-deps
           python -m conda init --all
           . $CONDA_PREFIX/etc/profile.d/conda.sh
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --reruns-delay=${{ env.PYTEST_RERUN_FAILURES_DELAY }} --durations=16
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Upload Coverage
@@ -337,6 +341,7 @@ jobs:
           --group=${{ matrix.test-group }}
           --splits=${{ env.PYTEST_SPLITS }}
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
+          --reruns-delay ${{ env.PYTEST_RERUN_FAILURES_DELAY }}
           -m "${{ env.PYTEST_MARKER }}"
 
       # CONDA-RATTLER-SOLVER CHANGE
@@ -347,7 +352,7 @@ jobs:
           python -m pip install -e ../conda/ --no-deps
           python -m conda init --all
           . $CONDA_PREFIX/etc/profile.d/conda.sh
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --reruns-delay ${{ env.PYTEST_RERUN_FAILURES_DELAY }} --durations=16
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Upload Coverage
@@ -627,6 +632,7 @@ jobs:
           --group=${{ matrix.test-group }}
           --splits=${{ env.PYTEST_SPLITS }}
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
+          --reruns-delay ${{ env.PYTEST_RERUN_FAILURES_DELAY }}
           -m "${{ env.PYTEST_MARKER }}"
 
       # CONDA-RATTLER-SOLVER CHANGE
@@ -637,7 +643,7 @@ jobs:
           python -m pip install -e ../conda/ --no-deps
           python -m conda init --all
           . $CONDA_PREFIX/etc/profile.d/conda.sh
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --reruns-delay ${{ env.PYTEST_RERUN_FAILURES_DELAY }} --durations=16
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Upload Coverage
