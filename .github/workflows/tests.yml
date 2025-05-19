@@ -189,8 +189,9 @@ jobs:
           --splits=${{ env.PYTEST_SPLITS }}
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
           -m "${{ env.PYTEST_MARKER }}"
+          --sw
 
-      # CONDA-LIBMAMBA-SOLVER CHANGE
+      # CONDA-RATTLER-SOLVER CHANGE
       - name: Run conda-rattler-solver Tests
         working-directory: conda-rattler-solver
         if: ${{ matrix.test-type == 'conda-rattler-solver' }}
@@ -199,8 +200,8 @@ jobs:
           python -m pip install -e ../conda/ --no-deps
           python -m conda init --all
           . $CONDA_PREFIX/etc/profile.d/conda.sh
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
-      #/ CONDA-LIBMAMBA-SOLVER CHANGE
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16 --sw
+      #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Upload Coverage
         uses: codecov/codecov-action@v4
