@@ -63,7 +63,6 @@ class RattlerIndexHelper:
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
 
-
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
         if not channel.platform:

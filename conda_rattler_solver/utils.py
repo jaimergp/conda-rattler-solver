@@ -285,5 +285,5 @@ def fix_version_field_for_conda_build(spec: MatchSpec) -> MatchSpec:
     return spec
 
 
-def random_hex(length: int = 6) -> str:
-    return random.choices(hexdigits, length)
+def random_hex(length: int = 7) -> str:
+    return "".join(random.choices(hexdigits, k=length))
