@@ -125,9 +125,6 @@ class RattlerIndexHelper:
         return self._index[key]
 
     def _fetch_channel(self, url: str) -> tuple[str, os.PathLike]:
-        if url.startswith("file://"):
-            return url, f"{url_to_path(url)}{os.path.sep}{self._repodata_fn}"
-
         channel = Channel.from_url(url)
         if not channel.subdir:
             raise ValueError(f"Channel URLs must specify a subdir! Provided: {url}")
