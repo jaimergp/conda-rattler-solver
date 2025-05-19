@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from contextlib import suppress
+from enum import Enum
 from logging import getLogger
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -21,7 +22,6 @@ from conda.models.version import VersionOrder
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from enum import Enum
     from typing import Any
 
     from conda.common.path import PathType
@@ -95,9 +95,22 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
     )
 
 
+class FakeRattlerLinkType(Enum):
+    # directory is not a link type, and copy is not a path type
+    # LinkType is still probably the best name here
+    hardlink = "hardlink"
+    softlink = "softlink"
+    copy = "copy"
+    directory = "directory"
+
+
 def conda_prefix_record_to_rattler_prefix_record(
     record: PrefixRecord,
 ) -> rattler.PrefixRecord:
+    if platform := record.get("platform"):
+        platform = platform.value
+    if noarch := record.get("noarch"):
+        noarch = rattler.NoArchType(noarch.value)
     package_record = rattler.PackageRecord(
         name=record.name,
         version=record.version,
@@ -105,8 +118,8 @@ def conda_prefix_record_to_rattler_prefix_record(
         build_number=record.build_number,
         subdir=record.subdir,
         arch=record.get("arch"),
-        platform=record.get("platform").value if record.get("platform") else None,
-        noarch=rattler.NoArchType(record.get("noarch")),  # BUGGY
+        platform=platform,
+        noarch=noarch,
         depends=record.get("depends"),
         constrains=record.get("constrains"),
         sha256=bytes.fromhex(record.get("sha256") or "") or None,
@@ -142,7 +155,7 @@ def conda_prefix_record_to_rattler_prefix_record(
             path_entries.append(rattler.PrefixPathsEntry(**kwargs))
         paths_data.paths = path_entries
     if conda_link := record.get("link"):
-        link_type = getattr(rattler.LinkType, conda_link.name.upper(), None)
+        link_type = FakeRattlerLinkType(str(conda_link.type))
         link = rattler.Link(path=conda_link.source, type=link_type)
     else:
         link = None
