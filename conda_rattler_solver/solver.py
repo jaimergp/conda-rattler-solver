@@ -9,8 +9,6 @@ from collections import defaultdict
 from functools import cache
 from inspect import stack
 from itertools import chain
-from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
 
 import rattler
@@ -19,7 +17,7 @@ from conda.base.context import context
 from conda.common.constants import NULL
 from conda.common.io import time_recorder
 from conda.core.solve import Solver
-from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
+from conda.exceptions import PackagesNotFoundError
 from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
@@ -31,6 +29,8 @@ from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
 from .state import SolverInputState, SolverOutputState
 from .utils import (
+    conda_match_spec_to_rattler_match_spec,
+    conda_prefix_record_to_rattler_prefix_record,
     fix_version_field_for_conda_build,
     maybe_ignore_current_repodata,
     notify_conda_outdated,
@@ -485,13 +485,13 @@ class RattlerSolver(Solver):
                     if installed not in locked_packages:
                         locked_packages.append(installed)
         return {
-            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
-            "constraints": [self._match_spec_to_rattler_match_spec(spec) for spec in constraints],
+            "specs": [conda_match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "constraints": [conda_match_spec_to_rattler_match_spec(spec) for spec in constraints],
             "locked_packages": [
-                self._prefix_record_to_rattler_prefix_record(record) for record in locked_packages
+                conda_prefix_record_to_rattler_prefix_record(record) for record in locked_packages
             ],
             "pinned_packages": [
-                self._prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
+                conda_prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
             ],
         }
 
@@ -543,13 +543,13 @@ class RattlerSolver(Solver):
                     locked_packages.append(installed)
 
         return {
-            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
-            "constraints": [self._match_spec_to_rattler_match_spec(spec) for spec in constraints],
+            "specs": [conda_match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "constraints": [conda_match_spec_to_rattler_match_spec(spec) for spec in constraints],
             "locked_packages": [
-                self._prefix_record_to_rattler_prefix_record(record) for record in locked_packages
+                conda_prefix_record_to_rattler_prefix_record(record) for record in locked_packages
             ],
             "pinned_packages": [
-                self._prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
+                conda_prefix_record_to_rattler_prefix_record(record) for record in pinned_packages
             ],
         }
 
@@ -653,19 +653,6 @@ class RattlerSolver(Solver):
     # endregion
     # region Converters & Checkers
 
-    @cache
-    def _prefix_record_to_rattler_prefix_record(self, record):
-        # TODO: This is a hack to get the installed packages into the solver
-        # but rattler doesn't allow PrefixRecords to be built through the API yet
-        with NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
-            data = record.dump()
-            data.setdefault("url", "https://this.package/does-not-have-a-url")
-            json.dump(data, tmp)
-        try:
-            return rattler.PrefixRecord.from_path(tmp.name)
-        finally:
-            Path(tmp.name).unlink()
-
     def _rattler_virtual_packages(
         self, in_state: SolverInputState
     ) -> list[rattler.GenericVirtualPackage]:
@@ -677,12 +664,6 @@ class RattlerSolver(Solver):
             )
             for pkg in in_state.virtual.values()
         ]
-
-    def _match_spec_to_rattler_match_spec(self, spec: MatchSpec) -> rattler.MatchSpec:
-        match_spec = MatchSpec(spec)
-        if os.sep in match_spec.name or "/" in match_spec.name:
-            raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
-        return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
 
     def _called_from_conda_build(self) -> bool:
         """
@@ -716,7 +697,7 @@ class RattlerSolver(Solver):
             specs.append(spec.conda_build_form())
 
         return {
-            "specs": [self._match_spec_to_rattler_match_spec(spec) for spec in specs],
+            "specs": [conda_match_spec_to_rattler_match_spec(spec) for spec in specs],
             "constraints": [],
             "locked_packages": [],
             "pinned_packages": [],

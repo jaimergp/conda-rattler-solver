@@ -7942,7 +7942,7 @@ packages:
 - pypi: .
   name: conda-rattler-solver
   version: 0.0.1
-  sha256: 7f348ab4539e4e76a9609af93414cb0d508f30f9971f0002f8de40717ac80f44
+  sha256: 15b80e0908dde74f76eeba4dea5e7ae5d437b228a3ad4a30f8698bc5b6cb8a2b
   requires_dist:
   - conda>=25.3.0
   - py-rattler>=0.12.0
