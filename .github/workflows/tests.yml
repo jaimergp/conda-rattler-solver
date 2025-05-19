@@ -126,11 +126,11 @@ jobs:
         shell: bash  # use bash to run date command
         run: echo "HASH=${{ runner.os }}-${{ runner.arch }}-Py${{ matrix.python-version }}-${{ matrix.default-channel }}-${{ matrix.test-type }}-${{ matrix.test-group }}-$(date -u "+%Y%m")" >> $GITHUB_ENV
 
-      - name: Cache Conda
-        uses: actions/cache@v4
-        with:
-          path: ~/conda_pkgs_dir
-          key: cache-${{ env.HASH }}
+      # - name: Cache Conda
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/conda_pkgs_dir
+      #     key: cache-${{ env.HASH }}
 
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
@@ -145,6 +145,7 @@ jobs:
         run: >
           conda install
           --yes
+          --quiet
           --file tests\requirements.txt
           --file tests\requirements-${{ runner.os }}.txt
           --file tests\requirements-ci.txt
@@ -156,7 +157,7 @@ jobs:
 
       # CONDA-RATTLER-SOLVER CHANGE
       - name: Install conda-rattler-solver
-        run: python -m pip install -e conda-rattler-solver/ -vv --no-deps
+        run: python -m pip install -e conda-rattler-solver/ --no-deps
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Conda Info
@@ -304,6 +305,7 @@ jobs:
         working-directory: conda
         run: conda install
           --yes
+          --quiet
           --file tests/requirements.txt
           --file tests/requirements-${{ runner.os }}.txt
           --file tests/requirements-ci.txt
@@ -315,7 +317,7 @@ jobs:
 
       # CONDA-RATTLER-SOLVER CHANGE
       - name: Install conda-rattler-solver
-        run: python -m pip install -e conda-rattler-solver/ -vv --no-deps
+        run: python -m pip install -e conda-rattler-solver/ --no-deps
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Conda Info
@@ -417,6 +419,7 @@ jobs:
       - name: Conda Install
         run: conda install
           --yes
+          --quiet
           --file tests/requirements.txt
           --file tests/requirements-${{ runner.os }}.txt
           --file tests/requirements-ci.txt
@@ -596,6 +599,7 @@ jobs:
         # CONDA-RATTLER-SOLVER CHANGE: add conda-rattler-solver requirements.txt
         run: conda install
           --yes
+          --quiet
           --file tests/requirements.txt
           --file tests/requirements-ci.txt
           --file tests/requirements-s3.txt
@@ -606,7 +610,7 @@ jobs:
 
       # CONDA-RATTLER-SOLVER CHANGE
       - name: Install conda-rattler-solver
-        run: python -m pip install -e conda-rattler-solver/ -vv --no-deps
+        run: python -m pip install -e conda-rattler-solver/ --no-deps
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Setup Shells
