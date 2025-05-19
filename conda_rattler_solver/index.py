@@ -277,5 +277,7 @@ class RattlerIndexHelper:
         return conda_records
 
     def __del__(self):
-        for path in self._unlink_on_del:
-            path.unlink(missing_ok=True)
+        if self._unlink_on_del:
+            self._index.clear()
+            for path in self._unlink_on_del:
+                path.unlink(missing_ok=True)
