@@ -16,7 +16,6 @@ import rattler
 from conda.base.constants import REPODATA_FN
 from conda.base.context import context
 from conda.common.io import DummyExecutor, ThreadLimitedThreadPoolExecutor
-from conda.common.path import url_to_path
 from conda.common.serialize import json_dump
 from conda.common.url import path_to_url, remove_auth, split_anaconda_token
 from conda.core.package_cache_data import PackageCacheData
@@ -278,6 +277,8 @@ class RattlerIndexHelper:
         return conda_records
 
     def __del__(self):
+        if self._unlink_on_del:
+            self._index.clear()
         for path in self._unlink_on_del:
             try:
                 path.unlink(missing_ok=True)
