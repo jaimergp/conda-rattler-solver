@@ -73,9 +73,7 @@ jobs:
     # only run test suite if there are code changes
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    env:
-      PYTEST_RERUN_FAILURES: 2
-      PYTEST_RERUN_FAILURES_DELAY: 5
+
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -103,6 +101,8 @@ jobs:
       PYTEST_MARKER: ${{ matrix.test-type == 'unit' && 'not integration' || 'integration' }}
       PYTEST_SPLITS: ${{ matrix.test-type == 'unit' && '2' || '3' }}
       REQUIREMENTS_TRUSTSTORE: ${{ contains('3.10|3.11|3.12', matrix.python-version) && '--file tests\requirements-truststore.txt' || '' }}
+      PYTEST_RERUN_FAILURES: 2
+      PYTEST_RERUN_FAILURES_DELAY: 5
 
     steps:
       - name: Checkout conda/conda # CONDA-RATTLER-SOLVER CHANGE
