@@ -189,7 +189,6 @@ jobs:
           --splits=${{ env.PYTEST_SPLITS }}
           --reruns=${{ env.PYTEST_RERUN_FAILURES }}
           -m "${{ env.PYTEST_MARKER }}"
-          --sw
 
       # CONDA-RATTLER-SOLVER CHANGE
       - name: Run conda-rattler-solver Tests
@@ -200,7 +199,7 @@ jobs:
           python -m pip install -e ../conda/ --no-deps
           python -m conda init --all
           . $CONDA_PREFIX/etc/profile.d/conda.sh
-          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16 --sw
+          python -m pytest -vv -m "not slow" --reruns=${{ env.PYTEST_RERUN_FAILURES }} --durations=16
       #/ CONDA-RATTLER-SOLVER CHANGE
 
       - name: Upload Coverage
