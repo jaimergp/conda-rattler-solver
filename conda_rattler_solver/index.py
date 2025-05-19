@@ -235,7 +235,7 @@ class RattlerIndexHelper:
         # 2. Fetch URLs (if needed)
         Executor = (
             DummyExecutor
-            if context.debug or context.repodata_threads == 1
+            if context.debug or context.repodata_threads == 1 or sys.platform == "win32"
             else partial(ThreadLimitedThreadPoolExecutor, max_workers=context.repodata_threads)
         )
         with Executor() as executor:
