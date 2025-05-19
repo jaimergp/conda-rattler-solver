@@ -186,7 +186,7 @@ class RattlerSolver(Solver):
             )
         else:
             return (
-                f"Channel: {"".join(canonical_names)}\n"
+                f"Channel: {''.join(canonical_names)}\n"
                 f"Platform: {context.subdir}\n"
                 f"Target prefix: {self.prefix}\n"
                 f"Collecting package metadata ({self._repodata_fn})"
