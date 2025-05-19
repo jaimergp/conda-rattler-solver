@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import atexit
 import logging
 import os
+import random
+import shutil
+import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from string import hexdigits
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING
 
@@ -50,11 +53,14 @@ class RattlerIndexHelper:
         repodata_fn: str = REPODATA_FN,
         pkgs_dirs: PathsType = (),
     ):
+        self._unlink_on_del: list[Path] = []
+
         self._channels = context.channels if channels is None else channels
         self._subdirs = context.subdirs if subdirs is None else subdirs
         self._repodata_fn = repodata_fn
 
-        self._index = self._load_channels()
+        self._index = {}
+        self._index.update(self._load_channels())
         if pkgs_dirs:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
@@ -141,11 +147,18 @@ class RattlerIndexHelper:
         noauth_url = channel.urls(with_credentials=False, subdirs=(channel.subdir,))[0]
         noauth_url_sans_subdir = noauth_url.rsplit("/", 1)[0]
         json_path = Path(json_path)
-        # for multichannel_name, channels in context.custom_multichannels.items():
-        #     if noauth_url_sans_subdir in [c.base_url for c in channels]:
-        #         rattler_channel = rattler.Channel(multichannel_name)
-        #         break
-        # else:
+        if (
+            sys.platform == "win32"
+            and os.environ.get("CI")
+            and os.environ.get("PYTEST_CURRENT_TEST")
+        ):
+            # TODO: Investigate why we need this race condition workaround on Windows CI only
+            random_hex = "".join(random.choices(hexdigits, k=6)).lower()
+            path_copy = json_path.parent / f"{json_path.stem}.copy-{random_hex}.json"
+            shutil.copy(json_path, path_copy)
+            json_path = path_copy
+            self._unlink_on_del.append(path_copy)
+        # TODO: Support multichannel https://github.com/conda/rattler/issues/1327
         rattler_channel = rattler.Channel(noauth_url_sans_subdir)
         repo = rattler.SparseRepoData(rattler_channel, channel.subdir, json_path)
         return _ChannelRepoInfo(
@@ -183,7 +196,7 @@ class RattlerIndexHelper:
         if urls is None:
             urls = self._urls_from_channels()
 
-        # 2. Fetch URLs (if needed)
+        # 1. Fetch URLs (if needed)
         Executor = (
             DummyExecutor
             if context.debug or context.repodata_threads == 1
@@ -192,7 +205,7 @@ class RattlerIndexHelper:
         with Executor() as executor:
             jsons = {url: str(path) for (url, path) in executor.map(self._fetch_channel, urls)}
 
-        # 3. Create repos in same order as `urls`
+        # 2. Create repos in same order as `urls`
         index = {}
         for url in urls:
             info = self._json_path_to_repo_info(url, jsons[url])
@@ -250,11 +263,11 @@ class RattlerIndexHelper:
                         local_json=f.name,
                     )
                 )
-                atexit.register(os.unlink, f.name)
+                self._unlink_on_del.append(Path(f.name))
         return repos
 
     def search(self, spec: str) -> list[PackageRecord]:
-        # This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
+        # TODO: This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
         conda_records = []
         spec = rattler.MatchSpec(str(spec))
         for info in self._index.values():
@@ -262,3 +275,13 @@ class RattlerIndexHelper:
                 if spec.matches(record):
                     conda_records.append(rattler_record_to_conda_record(record))
         return conda_records
+
+    def __del__(self):
+        if self._unlink_on_del:
+            self._index.clear()
+        for path in self._unlink_on_del:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception as exc:
+                print(exc, file=sys.stderr)  # Debug
+                print(self._index, file=sys.stderr)  # Debug

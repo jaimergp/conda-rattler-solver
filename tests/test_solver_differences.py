@@ -9,6 +9,9 @@ workarounds or didn't meet users' expectations... specially if compared to conda
 import json
 import os
 
+import pytest
+from conda.common.compat import on_linux
+
 from .repodata_time_machine import repodata_time_machine
 from .utils import conda_subprocess
 
@@ -156,6 +159,7 @@ def test_gpu_cpu_mutexes():
     assert not next((pkg for pkg in data["actions"]["LINK"] if pkg["name"] == "cudatoolkit"), None)
 
 
+@pytest.mark.skipif(not on_linux, reason="Slow. Running on Linux only.")
 def test_old_panel(tmp_path):
     """
     https://github.com/conda/conda-libmamba-solver/issues/64

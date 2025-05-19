@@ -23,13 +23,13 @@ from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
 from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
-from conda_libmamba_solver.state import SolverInputState, SolverOutputState
 from rattler import __version__ as rattler_version
 from rattler.exceptions import SolverError as RattlerSolverError
 
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
+from .state import SolverInputState, SolverOutputState
 from .utils import (
     fix_version_field_for_conda_build,
     maybe_ignore_current_repodata,
@@ -175,13 +175,22 @@ class RattlerSolver(Solver):
             return msg
 
         canonical_names = list(dict.fromkeys([c.canonical_name for c in channels]))
-        canonical_names_dashed = "\n - ".join(canonical_names)
-        return (
-            f"Channels:\n"
-            f" - {canonical_names_dashed}\n"
-            f"Platform: {context.subdir}\n"
-            f"Collecting package metadata ({self._repodata_fn})"
-        )
+        if len(canonical_names) > 1:
+            canonical_names_dashed = "\n - ".join(canonical_names)
+            return (
+                f"Channels:\n"
+                f" - {canonical_names_dashed}\n"
+                f"Platform: {context.subdir}\n"
+                f"Target prefix: {self.prefix}\n"
+                f"Collecting package metadata ({self._repodata_fn})"
+            )
+        else:
+            return (
+                f"Channel: {''.join(canonical_names)}\n"
+                f"Platform: {context.subdir}\n"
+                f"Target prefix: {self.prefix}\n"
+                f"Collecting package metadata ({self._repodata_fn})"
+            )
 
     def _collect_channel_list(self, in_state: SolverInputState) -> list[Channel]:
         # Aggregate channels and subdirs
@@ -649,7 +658,9 @@ class RattlerSolver(Solver):
         # TODO: This is a hack to get the installed packages into the solver
         # but rattler doesn't allow PrefixRecords to be built through the API yet
         with NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
-            json.dump(record.dump(), tmp)
+            data = record.dump()
+            data.setdefault("url", "https://this.package/does-not-have-a-url")
+            json.dump(data, tmp)
         try:
             return rattler.PrefixRecord.from_path(tmp.name)
         finally:
@@ -669,7 +680,7 @@ class RattlerSolver(Solver):
 
     def _match_spec_to_rattler_match_spec(self, spec: MatchSpec) -> rattler.MatchSpec:
         match_spec = MatchSpec(spec)
-        if "/" in match_spec.name:
+        if os.sep in match_spec.name or "/" in match_spec.name:
             raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
         return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
 
