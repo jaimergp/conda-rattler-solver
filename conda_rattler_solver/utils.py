@@ -142,9 +142,10 @@ def conda_prefix_record_to_rattler_prefix_record(
     if conda_paths_data := record.get("paths_data"):
         path_entries = []
         for path in conda_paths_data.paths:
+            path_type = str(path.path_type).replace("entry_point", "entrypoint")
             kwargs = {
                 "relative_path": path.path,
-                "path_type": rattler.PrefixPathType(str(path.path_type)),
+                "path_type": rattler.PrefixPathType(path_type),
                 "prefix_placeholder": getattr(path, "prefix_placeholder", None),
                 "sha256": bytes.fromhex(getattr(path, "sha256", "")) or None,
                 "sha256_in_prefix": bytes.fromhex(getattr(path, "sha256_in_prefix", "")) or None,
@@ -152,7 +153,7 @@ def conda_prefix_record_to_rattler_prefix_record(
             }
             if file_mode := str(getattr(path, "file_mode", "")):
                 kwargs["file_mode"] = rattler.FileMode(file_mode)
-            path_entries.append(rattler.PrefixPathsEntry(**kwargs))
+                path_entries.append(rattler.PrefixPathsEntry(**kwargs))
         paths_data.paths = path_entries
     if conda_link := record.get("link"):
         link_type = FakeRattlerLinkType(str(conda_link.type))
