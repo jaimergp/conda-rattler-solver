@@ -14,12 +14,14 @@ from conda import __version__ as _conda_version
 from conda.base.constants import KNOWN_SUBDIRS, REPODATA_FN, UNKNOWN_CHANNEL
 from conda.base.context import context
 from conda.common.path import paths_equal
+from conda.exceptions import PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
 from conda.models.records import PackageRecord, PrefixRecord
 from conda.models.version import VersionOrder
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from enum import Enum
     from typing import Any
 
     from conda.common.path import PathType
@@ -281,3 +283,72 @@ def fix_version_field_for_conda_build(spec: MatchSpec) -> MatchSpec:
                 spec_fields[1] = version_str + "*"
             return MatchSpec(" ".join(spec_fields))
     return spec
+
+
+def compatible_specs(
+    index: RattlerIndexHelper, specs: Iterable[MatchSpec], raise_not_found: bool = True
+) -> bool:
+    """
+    Assess whether the given specs are compatible with each other.
+    This is done by querying the index for each spec and taking the
+    intersection of the results. If the intersection is empty, the
+    specs are incompatible.
+
+    If raise_not_found is True, a PackagesNotFoundError will be raised
+    when one of the specs is not found. Otherwise, False will be returned
+    because the intersection will be empty.
+    """
+    if not len(specs) >= 2:
+        raise ValueError("Must specify at least two specs")
+
+    matched = None
+    for spec in specs:
+        results = set(index.search(spec))
+        if not results:
+            if raise_not_found:
+                exc = PackagesNotFoundError([spec], index.channels)
+                exc.allow_retry = False
+                raise exc
+            return False
+        if matched is None:
+            # First spec, just set matched to the results
+            matched = results
+            continue
+        # Take the intersection of the results
+        matched &= results
+        if not matched:
+            return False
+
+    return bool(matched)
+
+
+class EnumAsBools:
+    """
+    Allows an Enum to be bool-evaluated with attribute access.
+
+    >>> update_modifier = UpdateModifier("update_deps")
+    >>> update_modifier_as_bools = EnumAsBools(update_modifier)
+    >>> update_modifier == UpdateModifier.UPDATE_DEPS  # from this
+        True
+    >>> update_modidier_as_bools.UPDATE_DEPS  # to this
+        True
+    >>> update_modifier_as_bools.UPDATE_ALL
+        False
+    """
+
+    def __init__(self, enum: Enum):
+        self._enum = enum
+        self._names = {v.name for v in self._enum.__class__.__members__.values()}
+
+    def __getattr__(self, name: str) -> bool:
+        if name in ("name", "value"):
+            return getattr(self._enum, name)
+        if name in self._names:
+            return self._enum.name == name
+        raise AttributeError(f"'{name}' is not a valid name for {self._enum.__class__.__name__}")
+
+    def __eq__(self, obj: object) -> bool:
+        return self._enum.__eq__(obj)
+
+    def _dict(self) -> dict[str, bool]:
+        return {name: self._enum.name == name for name in self._names}

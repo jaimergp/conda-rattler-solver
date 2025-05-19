@@ -23,13 +23,13 @@ from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
 from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.reporters import get_spinner
-from conda_libmamba_solver.state import SolverInputState, SolverOutputState
 from rattler import __version__ as rattler_version
 from rattler.exceptions import SolverError as RattlerSolverError
 
 from . import __version__
 from .exceptions import RattlerUnsatisfiableError
 from .index import RattlerIndexHelper
+from .state import SolverInputState, SolverOutputState
 from .utils import (
     fix_version_field_for_conda_build,
     maybe_ignore_current_repodata,
@@ -175,13 +175,22 @@ class RattlerSolver(Solver):
             return msg
 
         canonical_names = list(dict.fromkeys([c.canonical_name for c in channels]))
-        canonical_names_dashed = "\n - ".join(canonical_names)
-        return (
-            f"Channels:\n"
-            f" - {canonical_names_dashed}\n"
-            f"Platform: {context.subdir}\n"
-            f"Collecting package metadata ({self._repodata_fn})"
-        )
+        if len(canonical_names) > 1:
+            canonical_names_dashed = "\n - ".join(canonical_names)
+            return (
+                f"Channels:\n"
+                f" - {canonical_names_dashed}\n"
+                f"Platform: {context.subdir}\n"
+                f"Target prefix: {self.prefix}\n"
+                f"Collecting package metadata ({self._repodata_fn})"
+            )
+        else:
+            return (
+                f"Channel: {"".join(canonical_names)}\n"
+                f"Platform: {context.subdir}\n"
+                f"Target prefix: {self.prefix}\n"
+                f"Collecting package metadata ({self._repodata_fn})"
+            )
 
     def _collect_channel_list(self, in_state: SolverInputState) -> list[Channel]:
         # Aggregate channels and subdirs
