@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from contextlib import suppress
+from enum import Enum
 from logging import getLogger
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -14,14 +15,13 @@ from conda import __version__ as _conda_version
 from conda.base.constants import KNOWN_SUBDIRS, REPODATA_FN, UNKNOWN_CHANNEL
 from conda.base.context import context
 from conda.common.path import paths_equal
-from conda.exceptions import PackagesNotFoundError
+from conda.exceptions import InvalidMatchSpec, PackagesNotFoundError
 from conda.models.match_spec import MatchSpec
 from conda.models.records import PackageRecord, PrefixRecord
 from conda.models.version import VersionOrder
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from enum import Enum
     from typing import Any
 
     from conda.common.path import PathType
@@ -54,15 +54,15 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
     else:
         raise ValueError(f"Unknown noarch type: {record.noarch}")
 
-    if record.channel.endswith(
-        (
-            "noarch",
-            *KNOWN_SUBDIRS,
-        )
-    ):
-        channel_url = record.channel
+    if record.channel:
+        if record.channel.endswith(("noarch", *KNOWN_SUBDIRS)):
+            channel_url = record.channel
+        elif record.subdir:
+            channel_url = f"{record.channel}/{record.subdir}"
+        else:
+            channel_url = record.channel
     else:
-        channel_url = (f"{record.channel}/{record.subdir}",)
+        channel_url = ""
 
     return PackageRecord(
         name=record.name.source,
@@ -78,7 +78,7 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
         url=record.url,
         sha256=_hash_to_str(record.sha256),
         arch=record.arch,
-        platform=record.platform,
+        platform=str(record.platform or "") or None,
         depends=record.depends or (),
         constrains=record.constrains or (),
         track_features=record.track_features or (),
@@ -95,9 +95,22 @@ def rattler_record_to_conda_record(record: rattler.PackageRecord) -> PackageReco
     )
 
 
+class FakeRattlerLinkType(Enum):
+    # directory is not a link type, and copy is not a path type
+    # LinkType is still probably the best name here
+    hardlink = "hardlink"
+    softlink = "softlink"
+    copy = "copy"
+    directory = "directory"
+
+
 def conda_prefix_record_to_rattler_prefix_record(
     record: PrefixRecord,
 ) -> rattler.PrefixRecord:
+    if platform := record.get("platform"):
+        platform = platform.value
+    if noarch := record.get("noarch"):
+        noarch = rattler.NoArchType(noarch.value)
     package_record = rattler.PackageRecord(
         name=record.name,
         version=record.version,
@@ -105,8 +118,8 @@ def conda_prefix_record_to_rattler_prefix_record(
         build_number=record.build_number,
         subdir=record.subdir,
         arch=record.get("arch"),
-        platform=record.get("platform"),
-        noarch=rattler.NoArchType(record.get("noarch")),  # BUGGY
+        platform=platform,
+        noarch=noarch,
         depends=record.get("depends"),
         constrains=record.get("constrains"),
         sha256=bytes.fromhex(record.get("sha256") or "") or None,
@@ -126,29 +139,43 @@ def conda_prefix_record_to_rattler_prefix_record(
         channel=record.channel.base_url,
     )
     paths_data = rattler.PrefixPaths()
-    path_entries = []
-    for path in record.paths_data.paths:
-        kwargs = {
-            "relative_path": path.path,
-            "path_type": rattler.PrefixPathType(str(path.path_type)),
-            "prefix_placeholder": getattr(path, "prefix_placeholder", None),
-            "sha256": bytes.fromhex(getattr(path, "sha256", "")) or None,
-            "sha256_in_prefix": bytes.fromhex(getattr(path, "sha256_in_prefix", "")) or None,
-            "size_in_bytes": getattr(path, "size_in_bytes", None),
-        }
-        if file_mode := str(getattr(path, "file_mode", "")):
-            kwargs["file_mode"] = rattler.FileMode(file_mode)
-        path_entries.append(rattler.PrefixPathsEntry(**kwargs))
-    paths_data.paths = path_entries
+    if conda_paths_data := record.get("paths_data"):
+        path_entries = []
+        for path in conda_paths_data.paths:
+            path_type = str(path.path_type).replace("entry_point", "entrypoint")
+            kwargs = {
+                "relative_path": path.path,
+                "path_type": rattler.PrefixPathType(path_type),
+                "prefix_placeholder": getattr(path, "prefix_placeholder", None),
+                "sha256": bytes.fromhex(getattr(path, "sha256", "")) or None,
+                "sha256_in_prefix": bytes.fromhex(getattr(path, "sha256_in_prefix", "")) or None,
+                "size_in_bytes": getattr(path, "size_in_bytes", None),
+            }
+            if file_mode := str(getattr(path, "file_mode", "")):
+                kwargs["file_mode"] = rattler.FileMode(file_mode)
+                path_entries.append(rattler.PrefixPathsEntry(**kwargs))
+        paths_data.paths = path_entries
+    if conda_link := record.get("link"):
+        link_type = FakeRattlerLinkType(str(conda_link.type))
+        link = rattler.Link(path=conda_link.source, type=link_type)
+    else:
+        link = None
     return rattler.PrefixRecord(
         repodata_record=repodata_record,
         paths_data=paths_data,
-        # missing 'link' argument
-        package_tarball_full_path=record.package_tarball_full_path,
-        extracted_package_dir=record.extracted_package_dir,
+        link=link,
+        package_tarball_full_path=record.get("package_tarball_full_path"),
+        extracted_package_dir=record.get("extracted_package_dir"),
         requested_spec=record.get("requested_spec"),
         files=record.files,
     )
+
+
+def conda_match_spec_to_rattler_match_spec(spec: MatchSpec) -> rattler.MatchSpec:
+    match_spec = MatchSpec(spec)
+    if os.sep in match_spec.name or "/" in match_spec.name:
+        raise InvalidMatchSpec(match_spec, "Cannot contain slashes.")
+    return rattler.MatchSpec(str(match_spec).rstrip("=").replace("=[", "["))
 
 
 def empty_repodata_dict(subdir: str, **info_kwargs) -> dict[str, Any]:

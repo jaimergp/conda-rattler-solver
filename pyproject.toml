@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/jaimergp/conda-rattler-solver"
+homepage = "https://github.com/conda-incubator/conda-rattler-solver"
 
 [project.entry-points.conda]
 conda-rattler-solver = "conda_rattler_solver.plugin"
