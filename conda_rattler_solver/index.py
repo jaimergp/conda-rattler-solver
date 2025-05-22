@@ -65,6 +65,11 @@ class RattlerIndexHelper:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
+        self._package_format = (
+            rattler.PackageFormatSelection.ONLY_TAR_BZ2
+            if context.use_only_tar_bz2
+            else rattler.PackageFormatSelection.PREFER_CONDA
+        )
 
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
@@ -96,23 +101,13 @@ class RattlerIndexHelper:
         filter_: callable | None = None,
     ) -> int:
         count = 0
-        seen = set()  # TODO: Remove when https://github.com/conda/rattler/issues/1330 is fixed
-        for info in repos or self._index.values():
-            if filter_ is not None:
-                for name in info.repo.package_names():
-                    if name in seen:
-                        continue
-                    seen.add(name)
-                    for record in info.repo.load_records(rattler.PackageName(name)):
-                        if filter_(record):
-                            count += 1
-            else:
-                for name in info.repo.package_names():
-                    if name in seen:
-                        continue
-                    seen.add(name)
-                    for record in info.repo.load_records(rattler.PackageName(name)):
+        if filter_ is not None:
+            for info in repos or self._index.values():
+                for record in info.repo.load_all_records(self._package_format):
+                    if filter_(record):
                         count += 1
+        else:
+            count += info.repo.record_count(package_format_selection=self._package_format)
         return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:

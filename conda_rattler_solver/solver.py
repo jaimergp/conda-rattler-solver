@@ -360,6 +360,7 @@ class RattlerSolver(Solver):
                         else rattler.ChannelPriority.Disabled
                     ),
                     strategy="highest",
+                    use_only_tar_bz2=context.use_only_tar_bz2,
                 )
             )
         except RattlerSolverError as exc:
