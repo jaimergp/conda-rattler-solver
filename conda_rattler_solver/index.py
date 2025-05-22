@@ -106,7 +106,8 @@ class RattlerIndexHelper:
                         count += 1
         else:
             for info in repos or self._index.values():
-                count += info.repo.record_count(package_format_selection=self._package_format)
+                for record in info.repo.load_all_records(self._package_format):
+                    count += 1
         return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
