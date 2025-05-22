@@ -65,11 +65,6 @@ class RattlerIndexHelper:
             self._index.update(
                 {info.noauth_url: info for info in self._load_pkgs_cache(pkgs_dirs)}
             )
-        self._package_format = (
-            rattler.PackageFormatSelection.ONLY_TAR_BZ2
-            if context.use_only_tar_bz2
-            else rattler.PackageFormatSelection.PREFER_CONDA
-        )
 
     @classmethod
     def from_platform_aware_channel(cls, channel: Channel) -> Self:
@@ -270,6 +265,14 @@ class RattlerIndexHelper:
                 if spec.matches(record):
                     conda_records.append(rattler_record_to_conda_record(record))
         return conda_records
+
+    @property
+    def _package_format(self) -> rattler.PackageFormatSelection:
+        return (
+            rattler.PackageFormatSelection.ONLY_TAR_BZ2
+            if context.use_only_tar_bz2
+            else rattler.PackageFormatSelection.PREFER_CONDA
+        )
 
     def __del__(self):
         if self._unlink_on_del:
