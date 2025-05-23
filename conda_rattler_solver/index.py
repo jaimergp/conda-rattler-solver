@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from typing import Self
 
     from conda.common.path import PathsType
+    from conda.models.match_spec import MatchSpec
     from conda.models.records import PackageCacheRecord, PackageRecord
 
 log = logging.getLogger(f"conda.{__name__}")
@@ -261,15 +262,11 @@ class RattlerIndexHelper:
                 self._unlink_on_del.append(Path(f.name))
         return repos
 
-    def search(self, spec: str) -> list[PackageRecord]:
-        # TODO: This is slow, we need something like https://github.com/mamba-org/rattler/issues/518
-        conda_records = []
+    def search(self, spec: str | MatchSpec) -> Iterable[PackageRecord]:
         spec = rattler.MatchSpec(str(spec))
         for info in self._index.values():
-            for record in info.repo.load_records(spec.name):
-                if spec.matches(record):
-                    conda_records.append(rattler_record_to_conda_record(record))
-        return conda_records
+            for record in info.repo.load_matching_records([spec]):
+                yield rattler_record_to_conda_record(record)
 
     @property
     def _package_format(self) -> rattler.PackageFormatSelection:

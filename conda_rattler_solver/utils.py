@@ -274,7 +274,7 @@ def notify_conda_outdated(
             return
 
     # check if the loaded index contains records that match a more recent conda version
-    conda_newer_records = index.search(conda_newer_str)
+    conda_newer_records = list(index.search(conda_newer_str))
 
     # print instructions to stderr if we found a newer conda
     if conda_newer_records:
