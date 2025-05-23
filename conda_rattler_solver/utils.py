@@ -142,7 +142,7 @@ def conda_prefix_record_to_rattler_prefix_record(
     if conda_paths_data := record.get("paths_data"):
         path_entries = []
         for path in conda_paths_data.paths:
-            path_type = str(path.path_type).replace("entry_point", "entrypoint")
+            path_type = str(path.path_type)
             kwargs = {
                 "relative_path": path.path,
                 "path_type": rattler.PrefixPathType(path_type),

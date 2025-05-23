@@ -40,12 +40,7 @@ def test_given_channels(monkeypatch: pytest.MonkeyPatch, tmp_path: os.PathLike):
         pytest.param("", id="CONDA_USE_ONLY_TAR_BZ2=false"),
     ),
 )
-@pytest.mark.xfail(
-    reason="https://github.com/conda/rattler/issues/1328 & "
-    "https://github.com/conda/rattler/issues/1329",
-    strict=True,
-)
-def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2: bool):
+def test_defaults_use_only_tar_bz2(monkeypatch: pytest.MonkeyPatch, only_tar_bz2: str):
     """
     Defaults is particular in the sense that it offers both .tar.bz2 and .conda for LOTS
     of packages. SubdirData ignores .tar.bz2 entries if they have a .conda counterpart.

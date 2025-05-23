@@ -59,7 +59,7 @@ class RattlerIndexHelper:
         self._subdirs = context.subdirs if subdirs is None else subdirs
         self._repodata_fn = repodata_fn
 
-        self._index = {}
+        self._index: dict[str, _ChannelRepoInfo] = {}
         self._index.update(self._load_channels())
         if pkgs_dirs:
             self._index.update(
@@ -85,10 +85,13 @@ class RattlerIndexHelper:
                 if repo_info.noauth_url == url:
                     log.debug("Reloading repo %s", repo_info.noauth_url)
                     urls[repo_info.full_url] = channel
+                    break
         for new_repo_info in self._load_channels(urls).values():
             for repo_info in self._index.values():
                 if repo_info.noauth_url == new_repo_info.noauth_url:
+                    repo_info.repo.close()
                     repo_info.repo = new_repo_info.repo
+                    break
 
     def n_packages(
         self,
@@ -96,23 +99,15 @@ class RattlerIndexHelper:
         filter_: callable | None = None,
     ) -> int:
         count = 0
-        seen = set()  # TODO: Remove when https://github.com/conda/rattler/issues/1330 is fixed
-        for info in repos or self._index.values():
-            if filter_ is not None:
-                for name in info.repo.package_names():
-                    if name in seen:
-                        continue
-                    seen.add(name)
-                    for record in info.repo.load_records(rattler.PackageName(name)):
-                        if filter_(record):
-                            count += 1
-            else:
-                for name in info.repo.package_names():
-                    if name in seen:
-                        continue
-                    seen.add(name)
-                    for record in info.repo.load_records(rattler.PackageName(name)):
+        if filter_ is not None:
+            for info in repos or self._index.values():
+                for record in info.repo.load_all_records(self._package_format):
+                    if filter_(record):
                         count += 1
+        else:
+            for info in repos or self._index.values():
+                for record in info.repo.load_all_records(self._package_format):
+                    count += 1
         return count
 
     def get_info(self, key: str) -> _ChannelRepoInfo:
@@ -276,8 +271,18 @@ class RattlerIndexHelper:
                     conda_records.append(rattler_record_to_conda_record(record))
         return conda_records
 
+    @property
+    def _package_format(self) -> rattler.PackageFormatSelection:
+        return (
+            rattler.PackageFormatSelection.ONLY_TAR_BZ2
+            if context.use_only_tar_bz2
+            else rattler.PackageFormatSelection.PREFER_CONDA
+        )
+
     def __del__(self):
         if self._unlink_on_del:
+            for info in self._index.values():
+                info.repo.close()
             self._index.clear()
         for path in self._unlink_on_del:
             try:
