@@ -40,10 +40,12 @@ def test_query_search():
         "defaults::ca-certificates[version='>=2022.9.24']",
         "defaults::ca-certificates[build='*_0']",
     ):
-        results = index.search(query)
+        results = list(index.search(query))
         assert len(results) > 0, query
 
-    assert index.search("ca-certificates=*=*_0") == index.search("ca-certificates[build='*_0']")
-    assert index.search("ca-certificates >=2022.9.24") == index.search(
-        "ca-certificates[version='>=2022.9.24']"
+    assert list(index.search("ca-certificates=*=*_0")) == list(
+        index.search("ca-certificates[build='*_0']")
+    )
+    assert list(index.search("ca-certificates >=2022.9.24")) == list(
+        index.search("ca-certificates[version='>=2022.9.24']")
     )
