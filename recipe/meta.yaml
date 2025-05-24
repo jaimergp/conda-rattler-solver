@@ -30,13 +30,13 @@ test:
   imports:
     - conda_rattler_solver
   commands:
-    - conda create--dry-run scipy --solver=rattler
+    - CONDA_SOLVER=rattler conda create --dry-run scipy
     - >-
       python -c
-      "import conda_rattler_solver as cls;
+      "import conda_rattler_solver as crs;
       from importlib.metadata import version;
-      assert '{{ PKG_VERSION }}' == cls.__version__ == version('conda_rattler_solver'),
-      '{{ PKG_VERSION }}' + f', {cls.__version__}, ' + version('conda_rattler_solver')
+      assert '{{ PKG_VERSION }}' == crs.__version__ == version('conda_rattler_solver'),
+      '{{ PKG_VERSION }}' + f', {crs.__version__}, ' + version('conda_rattler_solver')
       " || true
     # we accept errors here because GIT_DESCRIBE_TAG has some accuracy issues.
     # Shouldn't happen in production recipes; aka do not add '|| true' in the feedstock
@@ -51,5 +51,3 @@ about:
 extra:
   recipe-maintainers:
     - jaimergp
-    - jezdez
-    - wolfv
